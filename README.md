@@ -1,5 +1,4 @@
 # Ali
 Technical 
 
-- `docs/rectangle_scan.md` — how the PLC drives a rectangle scan through program 20, with the blocks in `plc/` and `robot/`.
-- `docs/hmi_screen.md` — the scan screen, its rules and every HMI tag.
+- `APPLY_GUIDE.md` — the one document: how the PLC drives a rectangle scan through program 20, how to apply the blocks in `plc/` and `robot/`, the HMI, the tests, and what is still open.
