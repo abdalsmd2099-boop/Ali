@@ -1,0 +1,1009 @@
+// bge portal - rectangle scan through program 20
+// one external source for tia portal: external source files -> add -> generate blocks from source
+// order inside this file is the dependency order, do not reorder
+//
+// what comes out:
+//   7 plc data types   udt_pose5 udt_fence udt_row udt_job udt_scanrect udt_srllane udt_hmi
+//   5 dbs              db_scan db_job db_srllane db_hmi db_scanjob (instance)
+//   2 fcs for the list fc_addrow fc_genrect
+//   2 fbs for the move fb_srlmove fb_scanjob
+//   2 fcs to call      fc_srlwindow (ob30, network 2)  fc_scancontrol (ob1, after fb_machineready)
+//
+// everything on the bus is whole mm and deg, decimal places 0 on the robot
+
+
+// ===================================================================================
+// data types
+// ===================================================================================
+
+TYPE "UDT_Pose5"
+VERSION : 0.1
+   STRUCT
+      X : Real;      // mm
+      Y : Real;      // mm
+      Z : Real;      // mm
+      RotZ : Real;   // deg
+      RotY : Real;   // deg
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "UDT_Fence"
+VERSION : 0.1
+   STRUCT
+      Xmin : Real;   // mm, inside the soft limits of the robot
+      Xmax : Real;
+      Ymin : Real;
+      Ymax : Real;
+      Zmin : Real;
+      Zmax : Real;
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "UDT_Row"
+VERSION : 0.1
+   STRUCT
+      Pose : "UDT_Pose5";
+      Block : Int;       // 1 lin fast, 2 lin slow, 3 circ ccw, 4 circ cw
+      Speed : Real;      // mm/s, only for the move timeout, same value as programmed in the robot
+      Radius : Real;     // mm, circ only
+      ScanOn : Bool;     // the scanner records while this move runs
+      Measure : Bool;    // one measurement after this move, the job waits for it
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "UDT_Job"
+VERSION : 0.1
+   STRUCT
+      Count : Int;                       // rows in use
+      RowIdx : Int;                      // row running now, 0 = none
+      Status : Int;                      // 0 idle, 1 running, 2 paused, 3 done, 4 fault
+      Error : Int;                       // error number of the last fault
+      Lanes : Int;                       // for the screen, from the generator
+      EstTimeS : Int;                    // rough job time in s, from the generator
+      Fence : "UDT_Fence";
+      Rows : Array[1..80] of "UDT_Row";
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "UDT_ScanRect"
+VERSION : 0.1
+   STRUCT
+      X0 : Real;      // first corner, mm
+      Y0 : Real;
+      Z0 : Real;      // scan height
+      RotZ : Real;    // tool orientation during the scan, deg
+      RotY : Real;
+      Lx : Real;      // rectangle size along x, mm
+      Ly : Real;      // rectangle size along y, mm
+      Py : Real;      // lane pitch, mm
+      Px : Real;      // point pitch along a lane, 0 = one slow line per lane
+      Over : Real;    // overscan, mm, a slow lane starts and ends this far outside the rectangle
+      Vscan : Real;   // mm/s of the slow lin block in the robot
+      Vmove : Real;   // mm/s of the fast lin block in the robot
+      Zsafe : Real;   // retract height, mm
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "UDT_SrlLane"
+VERSION : 0.1
+   STRUCT
+      Pose : Array[1..5] of Int;   // pose 51, whole mm and deg
+      Par : Array[1..4] of Int;    // real 51..54: radius, run number, spare, spare
+      Gate : Array[1..8] of Bool;  // bool 51..58
+      Commit : Bool;               // written last by fb_srlmove, cleared by fc_srlwindow after the copy
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "UDT_HMI"
+VERSION : 0.1
+   STRUCT
+      StartScan : Bool;          // press, the plc clears it once seen
+      Check : Bool;              // press, builds the list without starting, plc clears
+      Pause : Bool;              // switch, holds between rows
+      Abort : Bool;              // press, plc clears
+      ResetFault : Bool;         // press, plc clears
+      StepMode : Bool;           // switch, commissioning: one row per next
+      Next : Bool;               // press, plc clears
+      TestMove : Bool;           // press, commissioning: one row from testpose, plc clears
+      TestPose : "UDT_Pose5";
+      TestBlock : Int;           // 1 lin fast, 2 lin slow, 3 circ ccw, 4 circ cw
+      CheckResult : Int;         // 0 ok, 1 bad size, 2 too long, 3 outside the fence
+   END_STRUCT;
+
+END_TYPE
+
+
+// ===================================================================================
+// global data
+// ===================================================================================
+
+DATA_BLOCK "DB_Scan"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+"UDT_ScanRect"
+
+BEGIN
+   // the standard rectangle, the hmi may change these, set the db retentive in its properties
+   X0 := 1000.0;
+   Y0 := 500.0;
+   Z0 := 300.0;
+   RotZ := 0.0;
+   RotY := 0.0;
+   Lx := 300.0;
+   Ly := 200.0;
+   Py := 50.0;
+   Px := 0.0;
+   Over := 20.0;
+   Vscan := 50.0;
+   Vmove := 200.0;
+   Zsafe := 600.0;
+
+END_DATA_BLOCK
+
+DATA_BLOCK "DB_Job"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+"UDT_Job"
+
+BEGIN
+   // placeholder fence, replace with the real envelope read from the robot soft limits
+   Fence.Xmin := 0.0;
+   Fence.Xmax := 4000.0;
+   Fence.Ymin := 0.0;
+   Fence.Ymax := 3000.0;
+   Fence.Zmin := 0.0;
+   Fence.Zmax := 1500.0;
+
+END_DATA_BLOCK
+
+DATA_BLOCK "DB_SrlLane"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+"UDT_SrlLane"
+
+BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK "DB_HMI"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+"UDT_HMI"
+
+BEGIN
+   TestBlock := 1;
+
+END_DATA_BLOCK
+
+
+// ===================================================================================
+// the list
+// ===================================================================================
+
+FUNCTION "FC_AddRow" : Int
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// appends one row to the job list
+// returns 0 = ok, 2 = list full, 3 = point outside the fence
+   VAR_INPUT
+      i_rX : Real;
+      i_rY : Real;
+      i_rZ : Real;
+      i_rRotZ : Real;
+      i_rRotY : Real;
+      i_iBlock : Int;        // 1 lin fast, 2 lin slow, 3 circ ccw, 4 circ cw
+      i_rSpeed : Real;       // mm/s, for the move timeout only
+      i_xScanOn : Bool;
+      i_xMeasure : Bool;
+      i_fence : "UDT_Fence";
+   END_VAR
+
+   VAR_IN_OUT
+      io_rows : Array[1..80] of "UDT_Row";
+      io_n : Int;
+   END_VAR
+
+
+BEGIN
+   IF #io_n >= 80 THEN
+      #FC_AddRow := 2;
+      RETURN;
+   END_IF;
+
+   // the fence is the last barrier before the robot soft limits, nothing outside it is ever sent
+   IF #i_rX < #i_fence.Xmin OR #i_rX > #i_fence.Xmax
+      OR #i_rY < #i_fence.Ymin OR #i_rY > #i_fence.Ymax
+      OR #i_rZ < #i_fence.Zmin OR #i_rZ > #i_fence.Zmax THEN
+      #FC_AddRow := 3;
+      RETURN;
+   END_IF;
+
+   #io_n := #io_n + 1;
+   #io_rows[#io_n].Pose.X := #i_rX;
+   #io_rows[#io_n].Pose.Y := #i_rY;
+   #io_rows[#io_n].Pose.Z := #i_rZ;
+   #io_rows[#io_n].Pose.RotZ := #i_rRotZ;
+   #io_rows[#io_n].Pose.RotY := #i_rRotY;
+   #io_rows[#io_n].Block := #i_iBlock;
+   #io_rows[#io_n].Speed := #i_rSpeed;
+   #io_rows[#io_n].Radius := 0.0;
+   #io_rows[#io_n].ScanOn := #i_xScanOn;
+   #io_rows[#io_n].Measure := #i_xMeasure;
+
+   #FC_AddRow := 0;
+END_FUNCTION
+
+FUNCTION "FC_GenRect" : Int
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// builds the point list for one rectangle scan
+// rows: approach above the start of lane 0, down, serpentine lanes, retract
+// returns 0 = ok, 1 = bad parameters, 2 = list full, 3 = point outside the fence
+// on any error the list is empty, a half list must never run
+   VAR_INPUT
+      i_scan : "UDT_ScanRect";
+   END_VAR
+
+   VAR_IN_OUT
+      io_job : "UDT_Job";
+   END_VAR
+
+   VAR_TEMP
+      iLanes : Int;
+      iLane : Int;
+      iPts : Int;
+      iK : Int;
+      iErr : Int;
+      rY : Real;
+      rXs : Real;
+      rXe : Real;
+      rDir : Real;
+      rOver : Real;
+      rX0s : Real;
+      rSec : Real;
+      rDx : Real;
+      rDy : Real;
+      rDz : Real;
+      xPointMode : Bool;
+   END_VAR
+
+
+BEGIN
+   #io_job.Count := 0;
+   #io_job.RowIdx := 0;
+
+   // whole mm only, the bus carries no decimals, the hmi limits keep the operator inside that
+   IF #i_scan.Lx <= 0.0 OR #i_scan.Ly <= 0.0 OR #i_scan.Py <= 0.0 OR #i_scan.Px < 0.0
+      OR #i_scan.Over < 0.0 OR #i_scan.Vscan <= 0.0 OR #i_scan.Vmove <= 0.0
+      OR #i_scan.Zsafe <= #i_scan.Z0 THEN
+      #FC_GenRect := 1;
+      RETURN;
+   END_IF;
+
+   #xPointMode := #i_scan.Px > 0.0;
+
+   // overscan only on the slow lanes: the gantry is at speed when it enters the rectangle
+   IF #xPointMode THEN
+      #rOver := 0.0;
+   ELSE
+      #rOver := #i_scan.Over;
+   END_IF;
+   #rX0s := #i_scan.X0 - #rOver;
+
+   // lanes across the rectangle, the last lane lies on or inside the far edge
+   #iLanes := 1;
+   WHILE INT_TO_REAL(#iLanes) * #i_scan.Py <= #i_scan.Ly AND #iLanes < 80 DO
+      #iLanes := #iLanes + 1;
+   END_WHILE;
+
+   // points along one lane, point mode only
+   #iPts := 1;
+   IF #xPointMode THEN
+      WHILE INT_TO_REAL(#iPts) * #i_scan.Px <= #i_scan.Lx AND #iPts < 80 DO
+         #iPts := #iPts + 1;
+      END_WHILE;
+   END_IF;
+
+   // approach: above the start of lane 0 at safe height, then straight down to scan height
+   #iErr := "FC_AddRow"(i_rX := #rX0s,
+                        i_rY := #i_scan.Y0,
+                        i_rZ := #i_scan.Zsafe,
+                        i_rRotZ := #i_scan.RotZ,
+                        i_rRotY := #i_scan.RotY,
+                        i_iBlock := 1,
+                        i_rSpeed := #i_scan.Vmove,
+                        i_xScanOn := FALSE,
+                        i_xMeasure := FALSE,
+                        i_fence := #io_job.Fence,
+                        io_rows := #io_job.Rows,
+                        io_n := #io_job.Count);
+   IF #iErr = 0 THEN
+      #iErr := "FC_AddRow"(i_rX := #rX0s,
+                           i_rY := #i_scan.Y0,
+                           i_rZ := #i_scan.Z0,
+                           i_rRotZ := #i_scan.RotZ,
+                           i_rRotY := #i_scan.RotY,
+                           i_iBlock := 1,
+                           i_rSpeed := #i_scan.Vmove,
+                           i_xScanOn := FALSE,
+                           i_xMeasure := #xPointMode,
+                           i_fence := #io_job.Fence,
+                           io_rows := #io_job.Rows,
+                           io_n := #io_job.Count);
+   END_IF;
+
+   FOR #iLane := 0 TO #iLanes - 1 DO
+      IF #iErr <> 0 THEN
+         EXIT;
+      END_IF;
+
+      #rY := #i_scan.Y0 + INT_TO_REAL(#iLane) * #i_scan.Py;
+
+      // even lanes run +x, odd lanes run back -x, so the gantry never crosses the rectangle
+      IF (#iLane MOD 2) = 0 THEN
+         #rXs := #i_scan.X0 - #rOver;
+         #rXe := #i_scan.X0 + #i_scan.Lx + #rOver;
+         #rDir := 1.0;
+      ELSE
+         #rXs := #i_scan.X0 + #i_scan.Lx + #rOver;
+         #rXe := #i_scan.X0 - #rOver;
+         #rDir := -1.0;
+      END_IF;
+
+      // sidestep to the start of this lane, lane 0 is already there after the approach
+      IF #iLane > 0 THEN
+         #iErr := "FC_AddRow"(i_rX := #rXs,
+                              i_rY := #rY,
+                              i_rZ := #i_scan.Z0,
+                              i_rRotZ := #i_scan.RotZ,
+                              i_rRotY := #i_scan.RotY,
+                              i_iBlock := 1,
+                              i_rSpeed := #i_scan.Vmove,
+                              i_xScanOn := FALSE,
+                              i_xMeasure := #xPointMode,
+                              i_fence := #io_job.Fence,
+                              io_rows := #io_job.Rows,
+                              io_n := #io_job.Count);
+      END_IF;
+
+      IF #iErr = 0 THEN
+         IF NOT #xPointMode THEN
+            // one slow line over the whole lane, the scanner records while moving
+            #iErr := "FC_AddRow"(i_rX := #rXe,
+                                 i_rY := #rY,
+                                 i_rZ := #i_scan.Z0,
+                                 i_rRotZ := #i_scan.RotZ,
+                                 i_rRotY := #i_scan.RotY,
+                                 i_iBlock := 2,
+                                 i_rSpeed := #i_scan.Vscan,
+                                 i_xScanOn := TRUE,
+                                 i_xMeasure := FALSE,
+                                 i_fence := #io_job.Fence,
+                                 io_rows := #io_job.Rows,
+                                 io_n := #io_job.Count);
+         ELSE
+            // a stop and one measurement every px along the lane
+            FOR #iK := 1 TO #iPts - 1 DO
+               #iErr := "FC_AddRow"(i_rX := #rXs + #rDir * INT_TO_REAL(#iK) * #i_scan.Px,
+                                    i_rY := #rY,
+                                    i_rZ := #i_scan.Z0,
+                                    i_rRotZ := #i_scan.RotZ,
+                                    i_rRotY := #i_scan.RotY,
+                                    i_iBlock := 2,
+                                    i_rSpeed := #i_scan.Vscan,
+                                    i_xScanOn := FALSE,
+                                    i_xMeasure := TRUE,
+                                    i_fence := #io_job.Fence,
+                                    io_rows := #io_job.Rows,
+                                    io_n := #io_job.Count);
+               IF #iErr <> 0 THEN
+                  EXIT;
+               END_IF;
+            END_FOR;
+         END_IF;
+      END_IF;
+   END_FOR;
+
+   // retract straight up from the last point, so the list always ends at safe height
+   IF #iErr = 0 THEN
+      #iErr := "FC_AddRow"(i_rX := #io_job.Rows[#io_job.Count].Pose.X,
+                           i_rY := #io_job.Rows[#io_job.Count].Pose.Y,
+                           i_rZ := #i_scan.Zsafe,
+                           i_rRotZ := #i_scan.RotZ,
+                           i_rRotY := #i_scan.RotY,
+                           i_iBlock := 1,
+                           i_rSpeed := #i_scan.Vmove,
+                           i_xScanOn := FALSE,
+                           i_xMeasure := FALSE,
+                           i_fence := #io_job.Fence,
+                           io_rows := #io_job.Rows,
+                           io_n := #io_job.Count);
+   END_IF;
+
+   IF #iErr <> 0 THEN
+      #io_job.Count := 0;
+      #io_job.Lanes := 0;
+      #io_job.EstTimeS := 0;
+   ELSE
+      // rough job time for the screen: path over speed, plus start and finish of every row
+      // the first retract from wherever the gantry stands is a guess
+      #io_job.Lanes := #iLanes;
+      #rSec := 5.0;
+      FOR #iK := 2 TO #io_job.Count DO
+         #rDx := #io_job.Rows[#iK].Pose.X - #io_job.Rows[#iK - 1].Pose.X;
+         #rDy := #io_job.Rows[#iK].Pose.Y - #io_job.Rows[#iK - 1].Pose.Y;
+         #rDz := #io_job.Rows[#iK].Pose.Z - #io_job.Rows[#iK - 1].Pose.Z;
+         #rSec := #rSec + SQRT(#rDx * #rDx + #rDy * #rDy + #rDz * #rDz) / #io_job.Rows[#iK].Speed + 0.3;
+      END_FOR;
+      #io_job.EstTimeS := REAL_TO_INT(#rSec);
+   END_IF;
+   #FC_GenRect := #iErr;
+END_FUNCTION
+
+
+// ===================================================================================
+// the move
+// ===================================================================================
+
+FUNCTION_BLOCK "FB_SrlMove"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// one motion of program 20: load the window, commit, start, wait, verify
+// the only block that writes the srl lane
+// o_xstart goes to the robot through the arbiter, program number 20
+   VAR_INPUT
+      i_xExec : Bool;            // rising edge runs one move
+      i_iBlock : Int;            // 1 lin fast, 2 lin slow, 3 circ ccw, 4 circ cw
+      i_pose : "UDT_Pose5";
+      i_rRadius : Real;          // circ only
+      i_rSpeed : Real;           // expected speed of the block, for the timeout only
+      i_xAbort : Bool;
+      i_xProgFinished : Bool;    // pi 2.5
+      i_xRobotFault : Bool;
+      i_xCommOk : Bool;
+      i_iReal71 : Int;           // srlrealraw[1], the block that ran
+      i_iReal73 : Int;           // srlrealraw[3], the run number echo
+   END_VAR
+
+   VAR_OUTPUT
+      o_xBusy : Bool;
+      o_xDone : Bool;            // one cycle
+      o_xError : Bool;
+      o_iError : Int;            // 1 start not taken, 2 move timeout, 3 robot fault, 4 wrong block or stale echo, 5 comm lost, 6 aborted, 7 bad block number
+      o_xStart : Bool;
+      o_iProgNo : Int := 20;
+   END_VAR
+
+   VAR_IN_OUT
+      io_lane : "UDT_SrlLane";
+   END_VAR
+
+   VAR
+      iState : Int;
+      xExecOld : Bool;
+      iRun : Int;                // 1..30000, never 0, so a fresh robot never matches by accident
+      lastPose : "UDT_Pose5";
+      xHaveLast : Bool;
+      tMove : Time;
+      tonTaken : TON_TIME;
+      tonMove : TON_TIME;
+      iK : Int;
+   END_VAR
+
+   VAR_TEMP
+      rDx : Real;
+      rDy : Real;
+      rDz : Real;
+      rSec : Real;
+   END_VAR
+
+
+BEGIN
+   #o_xDone := FALSE;
+
+   // each timer runs only in its own state, so a state change resets it
+   #tonTaken(IN := #iState = 30, PT := T#2s);
+   #tonMove(IN := #iState = 40, PT := #tMove);
+
+   // anything that kills a running move, checked before the states
+   IF #iState <> 0 AND #iState < 90 THEN
+      IF #i_xAbort THEN
+         #o_iError := 6;
+         #iState := 90;
+      ELSIF NOT #i_xCommOk THEN
+         #o_iError := 5;
+         #iState := 90;
+      ELSIF #i_xRobotFault THEN
+         #o_iError := 3;
+         #iState := 90;
+      END_IF;
+   END_IF;
+
+   CASE #iState OF
+      0: // idle, wait for a new move
+         #o_xBusy := FALSE;
+         #o_xStart := FALSE;
+         IF #i_xExec AND NOT #xExecOld THEN
+            #o_xError := FALSE;
+            #o_iError := 0;
+            IF #i_iBlock < 1 OR #i_iBlock > 4 THEN
+               #o_iError := 7;
+               #iState := 90;
+            ELSE
+               #iState := 10;
+            END_IF;
+         END_IF;
+
+      10: // load the window, commit last so ob30 ships it in one piece
+          // wait while the previous commit is still on its way
+         #o_xBusy := TRUE;
+         IF NOT #io_lane.Commit THEN
+            #iRun := #iRun + 1;
+            IF #iRun > 30000 THEN
+               #iRun := 1;
+            END_IF;
+            #io_lane.Pose[1] := REAL_TO_INT(#i_pose.X);
+            #io_lane.Pose[2] := REAL_TO_INT(#i_pose.Y);
+            #io_lane.Pose[3] := REAL_TO_INT(#i_pose.Z);
+            #io_lane.Pose[4] := REAL_TO_INT(#i_pose.RotZ);
+            #io_lane.Pose[5] := REAL_TO_INT(#i_pose.RotY);
+            #io_lane.Par[1] := REAL_TO_INT(#i_rRadius);
+            #io_lane.Par[2] := #iRun;
+            #io_lane.Par[3] := 0;
+            #io_lane.Par[4] := 0;
+            FOR #iK := 1 TO 8 DO
+               #io_lane.Gate[#iK] := FALSE;
+            END_FOR;
+            #io_lane.Gate[#i_iBlock] := TRUE;   // exactly one gate, by construction
+            #io_lane.Commit := TRUE;
+
+            // timeout from the distance to the last target, doubled because an arc is longer than its chord
+            IF #xHaveLast AND #i_rSpeed > 0.0 THEN
+               #rDx := #i_pose.X - #lastPose.X;
+               #rDy := #i_pose.Y - #lastPose.Y;
+               #rDz := #i_pose.Z - #lastPose.Z;
+               #rSec := SQRT(#rDx * #rDx + #rDy * #rDy + #rDz * #rDz) / #i_rSpeed * 2.0 + 3.0;
+               #tMove := DINT_TO_TIME(REAL_TO_DINT(#rSec * 1000.0));
+            ELSE
+               #tMove := T#60s;
+            END_IF;
+            #iState := 20;
+         END_IF;
+
+      20: // ob30 clears commit once the window is on the bus, then start
+         IF NOT #io_lane.Commit THEN
+            #o_xStart := TRUE;
+            #iState := 30;
+         END_IF;
+
+      30: // the start is taken when program_finished drops
+         IF NOT #i_xProgFinished THEN
+            #iState := 40;
+         ELSIF #tonTaken.Q THEN
+            #o_iError := 1;
+            #iState := 90;
+         END_IF;
+
+      40: // the move runs, wait for program_finished
+         #o_xStart := FALSE;
+         IF #i_xProgFinished THEN
+            #iState := 50;
+         ELSIF #tonMove.Q THEN
+            #o_iError := 2;
+            #iState := 90;
+         END_IF;
+
+      50: // only this pass with our block counts as done
+         IF #i_iReal71 = #i_iBlock AND #i_iReal73 = #iRun THEN
+            #lastPose := #i_pose;
+            #xHaveLast := TRUE;
+            FOR #iK := 1 TO 8 DO
+               #io_lane.Gate[#iK] := FALSE;
+            END_FOR;
+            #io_lane.Commit := TRUE;
+            #o_xDone := TRUE;
+            #iState := 0;
+         ELSE
+            #o_iError := 4;
+            #iState := 90;
+         END_IF;
+
+      90: // error: gates off, start off, the job decides what happens next
+         #o_xStart := FALSE;
+         FOR #iK := 1 TO 8 DO
+            #io_lane.Gate[#iK] := FALSE;
+         END_FOR;
+         #io_lane.Commit := TRUE;
+         #xHaveLast := FALSE;      // the gantry may have stopped anywhere, next timeout is the long one
+         #o_xError := TRUE;
+         #o_xBusy := FALSE;
+         #iState := 0;
+   END_CASE;
+
+   #xExecOld := #i_xExec;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK "FB_ScanJob"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// runs the rows of one job, one move at a time
+// always retracts first, drives the scanner on the slow lanes, stops on the first error
+// the robot stop on o_xfault is done by the mode logic, not here
+   VAR_INPUT
+      i_xStart : Bool;           // rising edge
+      i_xPause : Bool;           // finishes the current row, then holds
+      i_xStepMode : Bool;        // commissioning: one row per next
+      i_xNext : Bool;            // one cycle
+      i_xAbort : Bool;
+      i_xMachineReady : Bool;    // from fb_machineready
+      i_actPose : "UDT_Pose5";   // actual position, whole mm
+      i_rZsafe : Real;
+      i_rVmove : Real;
+      i_xMeasDone : Bool;        // the scanner finished the single measurement
+      i_xProgFinished : Bool;
+      i_xRobotFault : Bool;
+      i_xCommOk : Bool;
+      i_iReal71 : Int;
+      i_iReal73 : Int;
+   END_VAR
+
+   VAR_OUTPUT
+      o_xStart : Bool;           // to the arbiter
+      o_iProgNo : Int;
+      o_xScanOn : Bool;          // the scanner records while true
+      o_xMeasTrigger : Bool;     // one measurement, held until measdone
+      o_xBusy : Bool;
+      o_xDone : Bool;            // one cycle
+      o_xFault : Bool;
+      o_iError : Int;            // 1..7 from fb_srlmove, 10 no job, 11 machine not ready, 12 measurement timeout
+   END_VAR
+
+   VAR_IN_OUT
+      io_job : "UDT_Job";
+      io_lane : "UDT_SrlLane";
+   END_VAR
+
+   VAR
+      iState : Int;
+      xStartOld : Bool;
+      xExec : Bool;
+      move : "FB_SrlMove";
+      row : "UDT_Row";
+      tonMeas : TON_TIME;
+   END_VAR
+
+
+BEGIN
+   #o_xDone := FALSE;
+   #tonMeas(IN := #iState = 40, PT := T#10s);
+
+   IF #i_xAbort AND #iState <> 0 AND #iState < 90 THEN
+      #o_iError := 6;
+      #iState := 90;
+   END_IF;
+
+   CASE #iState OF
+      0: // idle
+         #o_xBusy := FALSE;
+         IF #i_xStart AND NOT #xStartOld THEN
+            IF #io_job.Count = 0 THEN
+               #o_iError := 10;
+               #iState := 90;
+            ELSIF NOT #i_xMachineReady THEN
+               #o_iError := 11;
+               #iState := 90;
+            ELSE
+               #o_xFault := FALSE;
+               #o_iError := 0;
+               #io_job.RowIdx := 0;
+               #io_job.Status := 1;
+               #iState := 10;
+            END_IF;
+         END_IF;
+
+      10: // the first move is always straight up to safe height, from wherever the gantry stands
+          // skipped when it already stands there, a zero length lin is not worth the risk
+         #o_xBusy := TRUE;
+         IF ABS(#i_actPose.Z - #i_rZsafe) < 2.0 THEN
+            #iState := 20;
+         ELSE
+            #row.Pose := #i_actPose;
+            #row.Pose.Z := #i_rZsafe;
+            #row.Block := 1;
+            #row.Speed := #i_rVmove;
+            #row.Radius := 0.0;
+            #row.ScanOn := FALSE;
+            #row.Measure := FALSE;
+            #xExec := TRUE;
+            #iState := 30;
+         END_IF;
+
+      20: // next row, or hold here while paused or waiting for next in step mode
+         IF #i_xPause OR (#i_xStepMode AND NOT #i_xNext) THEN
+            #io_job.Status := 2;
+         ELSIF #io_job.RowIdx >= #io_job.Count THEN
+            #iState := 60;
+         ELSE
+            #io_job.Status := 1;
+            #io_job.RowIdx := #io_job.RowIdx + 1;
+            #row := #io_job.Rows[#io_job.RowIdx];
+            #o_xScanOn := #row.ScanOn;
+            #xExec := TRUE;
+            #iState := 30;
+         END_IF;
+
+      30: // the move runs in fb_srlmove
+         IF #move.o_xDone THEN
+            #o_xScanOn := FALSE;
+            IF #row.Measure THEN
+               #o_xMeasTrigger := TRUE;
+               #iState := 40;
+            ELSE
+               #iState := 20;
+            END_IF;
+         ELSIF #move.o_xError THEN
+            #o_xScanOn := FALSE;
+            #o_iError := #move.o_iError;
+            #iState := 90;
+         END_IF;
+
+      40: // one measurement at this point, the gantry stands still
+         IF #i_xMeasDone THEN
+            #o_xMeasTrigger := FALSE;
+            #iState := 20;
+         ELSIF #tonMeas.Q THEN
+            #o_xMeasTrigger := FALSE;
+            #o_iError := 12;
+            #iState := 90;
+         END_IF;
+
+      60: // job finished, the last row was the retract
+         #io_job.Status := 3;
+         #o_xDone := TRUE;
+         #iState := 0;
+
+      90: // fault, the gantry stays where it is, a new start retracts first
+         #o_xScanOn := FALSE;
+         #o_xMeasTrigger := FALSE;
+         #io_job.Status := 4;
+         #io_job.Error := #o_iError;
+         #o_xFault := TRUE;
+         #o_xBusy := FALSE;
+         #iState := 0;
+   END_CASE;
+
+   // the one move engine, called every cycle so its timers and edges work
+   #move(i_xExec := #xExec,
+         i_iBlock := #row.Block,
+         i_pose := #row.Pose,
+         i_rRadius := #row.Radius,
+         i_rSpeed := #row.Speed,
+         i_xAbort := #i_xAbort,
+         i_xProgFinished := #i_xProgFinished,
+         i_xRobotFault := #i_xRobotFault,
+         i_xCommOk := #i_xCommOk,
+         i_iReal71 := #i_iReal71,
+         i_iReal73 := #i_iReal73,
+         io_lane := #io_lane);
+   #xExec := FALSE;
+   #o_xStart := #move.o_xStart;
+   #o_iProgNo := #move.o_iProgNo;
+
+   #xStartOld := #i_xStart;
+END_FUNCTION_BLOCK
+
+DATA_BLOCK "DB_ScanJob"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+"FB_ScanJob"
+
+BEGIN
+
+END_DATA_BLOCK
+
+
+// ===================================================================================
+// the two calls you add to your obs
+// ===================================================================================
+
+FUNCTION "FC_SrlWindow" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// ob30, network 2, between the handshake toggle and the module 1 fb call
+// ships the srl window in one pass, only when fb_srlmove has committed it
+// connect the in-outs to the pose, parameter and bool pins of the module 2 fb
+// this is then the only writer of those pins
+   VAR_IN_OUT
+      io_iPose1 : Int;       // pose 51 x, word 114
+      io_iPose2 : Int;       // y
+      io_iPose3 : Int;       // z
+      io_iPose4 : Int;       // rotz
+      io_iPose5 : Int;       // roty, word 118
+      io_iPar1 : Int;        // real 51 radius, word 119
+      io_iPar2 : Int;        // real 52 run number
+      io_iPar3 : Int;        // real 53 spare
+      io_iPar4 : Int;        // real 54 spare, word 122
+      io_xBool1 : Bool;      // bool 51 lin fast, word 123 bit 0
+      io_xBool2 : Bool;      // bool 52 lin slow
+      io_xBool3 : Bool;      // bool 53 circ ccw
+      io_xBool4 : Bool;      // bool 54 circ cw
+      io_xBool5 : Bool;      // bool 55..58 free
+      io_xBool6 : Bool;
+      io_xBool7 : Bool;
+      io_xBool8 : Bool;
+      io_xPoseEnable : Bool; // pose enable pin of the module 2 fb
+   END_VAR
+
+
+BEGIN
+   IF "DB_SrlLane".Commit THEN
+      #io_iPose1 := "DB_SrlLane".Pose[1];
+      #io_iPose2 := "DB_SrlLane".Pose[2];
+      #io_iPose3 := "DB_SrlLane".Pose[3];
+      #io_iPose4 := "DB_SrlLane".Pose[4];
+      #io_iPose5 := "DB_SrlLane".Pose[5];
+      #io_iPar1 := "DB_SrlLane".Par[1];
+      #io_iPar2 := "DB_SrlLane".Par[2];
+      #io_iPar3 := "DB_SrlLane".Par[3];
+      #io_iPar4 := "DB_SrlLane".Par[4];
+      #io_xBool1 := "DB_SrlLane".Gate[1];
+      #io_xBool2 := "DB_SrlLane".Gate[2];
+      #io_xBool3 := "DB_SrlLane".Gate[3];
+      #io_xBool4 := "DB_SrlLane".Gate[4];
+      #io_xBool5 := "DB_SrlLane".Gate[5];
+      #io_xBool6 := "DB_SrlLane".Gate[6];
+      #io_xBool7 := "DB_SrlLane".Gate[7];
+      #io_xBool8 := "DB_SrlLane".Gate[8];
+      #io_xPoseEnable := TRUE;
+      "DB_SrlLane".Commit := FALSE;
+   END_IF;
+END_FUNCTION
+
+FUNCTION "FC_ScanControl" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// ob1, once per cycle, after fb_machineready and before the arbiter
+// the hmi talks to db_hmi, db_scan and db_job, the robot status comes in on the pins
+// every press bit from the hmi is cleared here once the plc has seen it
+   VAR_INPUT
+      i_xAuto : Bool;            // mode auto, a drop aborts the job
+      i_xMachineReady : Bool;    // ready to start, from fb_machineready
+      i_xProgFinished : Bool;    // pi 2.5 program_finished
+      i_xRobotFault : Bool;      // robot fault bit
+      i_xCommOk : Bool;          // communication ok from the module fb
+      i_iReal71 : Int;           // srlrealraw[1], block that ran
+      i_iReal73 : Int;           // srlrealraw[3], run number echo
+      i_iActX : Int;             // actual pose words from pi, whole mm and deg
+      i_iActY : Int;
+      i_iActZ : Int;
+      i_iActRotZ : Int;
+      i_iActRotY : Int;
+      i_xMeasDone : Bool;        // scanner finished one measurement
+   END_VAR
+
+   VAR_OUTPUT
+      o_xStart : Bool;           // start request for program 20, to the arbiter
+      o_iProgNo : Int;           // 20
+      o_xStop : Bool;            // stop request on a job fault, to the arbiter
+      o_xScanOn : Bool;          // scanner records while true
+      o_xMeasTrigger : Bool;     // one measurement, held until measdone
+      o_iRowTag : Int;           // row number for the scan data
+      o_iJobStatus : Int;        // 0 idle, 1 running, 2 paused, 3 done, 4 fault
+      o_iJobError : Int;
+   END_VAR
+
+   VAR_TEMP
+      xStartJob : Bool;
+      rTestSpeed : Real;
+      actPose : "UDT_Pose5";
+   END_VAR
+
+
+BEGIN
+   // reset: only clears a fault, never touches a running job
+   IF "DB_HMI".ResetFault THEN
+      "DB_HMI".ResetFault := FALSE;
+      IF "DB_Job".Status = 4 THEN
+         "DB_Job".Status := 0;
+         "DB_Job".Error := 0;
+      END_IF;
+   END_IF;
+
+   // check: builds the list from the screen values, shows rows and lanes, starts nothing
+   IF "DB_HMI".Check THEN
+      "DB_HMI".Check := FALSE;
+      IF "DB_Job".Status <> 1 AND "DB_Job".Status <> 2 THEN
+         "DB_HMI".CheckResult := "FC_GenRect"(i_scan := "DB_Scan", io_job := "DB_Job");
+      END_IF;
+   END_IF;
+
+   // start: the list is built again from what is on the screen at the moment of the press
+   #xStartJob := FALSE;
+   IF "DB_HMI".StartScan THEN
+      "DB_HMI".StartScan := FALSE;
+      IF "DB_Job".Status <> 1 AND "DB_Job".Status <> 2 THEN
+         "DB_HMI".CheckResult := "FC_GenRect"(i_scan := "DB_Scan", io_job := "DB_Job");
+         IF "DB_HMI".CheckResult = 0 THEN
+            #xStartJob := TRUE;
+         ELSE
+            "DB_Job".Status := 4;
+            "DB_Job".Error := 100 + "DB_HMI".CheckResult;   // 101 bad size, 102 too long, 103 outside the fence
+         END_IF;
+      END_IF;
+   END_IF;
+
+   // test move: one row from the test pose, through the same path as production
+   IF "DB_HMI".TestMove THEN
+      "DB_HMI".TestMove := FALSE;
+      IF "DB_Job".Status <> 1 AND "DB_Job".Status <> 2 THEN
+         IF "DB_HMI".TestBlock = 2 THEN
+            #rTestSpeed := "DB_Scan".Vscan;
+         ELSE
+            #rTestSpeed := "DB_Scan".Vmove;
+         END_IF;
+         "DB_Job".Count := 0;
+         "DB_HMI".CheckResult := "FC_AddRow"(i_rX := "DB_HMI".TestPose.X,
+                                             i_rY := "DB_HMI".TestPose.Y,
+                                             i_rZ := "DB_HMI".TestPose.Z,
+                                             i_rRotZ := "DB_HMI".TestPose.RotZ,
+                                             i_rRotY := "DB_HMI".TestPose.RotY,
+                                             i_iBlock := "DB_HMI".TestBlock,
+                                             i_rSpeed := #rTestSpeed,
+                                             i_xScanOn := FALSE,
+                                             i_xMeasure := FALSE,
+                                             i_fence := "DB_Job".Fence,
+                                             io_rows := "DB_Job".Rows,
+                                             io_n := "DB_Job".Count);
+         IF "DB_HMI".CheckResult = 0 THEN
+            #xStartJob := TRUE;
+         END_IF;
+      END_IF;
+   END_IF;
+
+   // the actual pose as the job wants it
+   #actPose.X := INT_TO_REAL(#i_iActX);
+   #actPose.Y := INT_TO_REAL(#i_iActY);
+   #actPose.Z := INT_TO_REAL(#i_iActZ);
+   #actPose.RotZ := INT_TO_REAL(#i_iActRotZ);
+   #actPose.RotY := INT_TO_REAL(#i_iActRotY);
+
+   // the job, one instance, it owns the one fb_srlmove instance inside it
+   "DB_ScanJob"(i_xStart := #xStartJob,
+                i_xPause := "DB_HMI".Pause,
+                i_xStepMode := "DB_HMI".StepMode,
+                i_xNext := "DB_HMI".Next,
+                i_xAbort := "DB_HMI".Abort OR NOT #i_xAuto,
+                i_xMachineReady := #i_xMachineReady,
+                i_actPose := #actPose,
+                i_rZsafe := "DB_Scan".Zsafe,
+                i_rVmove := "DB_Scan".Vmove,
+                i_xMeasDone := #i_xMeasDone,
+                i_xProgFinished := #i_xProgFinished,
+                i_xRobotFault := #i_xRobotFault,
+                i_xCommOk := #i_xCommOk,
+                i_iReal71 := #i_iReal71,
+                i_iReal73 := #i_iReal73,
+                io_job := "DB_Job",
+                io_lane := "DB_SrlLane");
+   "DB_HMI".Next := FALSE;
+   "DB_HMI".Abort := FALSE;
+
+   // what the arbiter and the scanner need
+   #o_xStart := "DB_ScanJob".o_xStart;
+   #o_iProgNo := "DB_ScanJob".o_iProgNo;
+   #o_xStop := "DB_ScanJob".o_xFault;
+   #o_xScanOn := "DB_ScanJob".o_xScanOn;
+   #o_xMeasTrigger := "DB_ScanJob".o_xMeasTrigger;
+   #o_iRowTag := "DB_Job".RowIdx;
+   #o_iJobStatus := "DB_Job".Status;
+   #o_iJobError := "DB_Job".Error;
+END_FUNCTION

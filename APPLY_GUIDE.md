@@ -21,27 +21,37 @@ One document. What the pieces are, in which order to put them in, how to prove e
 
 ## 2. The files
 
+Two files. One for the robot, one for TIA.
+
 | File | What it is | Goes where |
 | --- | --- | --- |
 | `robot/program20.srl` | the motion library, four gated blocks | RobotMonitor, program 20 |
-| `plc/UDT_Pose5.udt` | X Y Z RotZ RotY | TIA, PLC data types |
-| `plc/UDT_Fence.udt` | min and max per axis | TIA |
-| `plc/UDT_Row.udt` | one row: pose, block, speed, radius, scan on, measure | TIA |
-| `plc/UDT_Job.udt` | count, row index, status, error, lanes, time, fence, 80 rows | TIA |
-| `plc/UDT_ScanRect.udt` | the rectangle parameters | TIA |
-| `plc/UDT_SrlLane.udt` | pose words, parameter words, gates, commit | TIA |
-| `plc/UDT_HMI.udt` | press bits, switches, test pose, check result | TIA |
-| `plc/UDT_Scanner.udt` | scanner interface | TIA |
-| `plc/DB_Scan.db` | the rectangle, with standard values, **set retentive** | TIA, global DB |
-| `plc/DB_Job.db` | the list, with a placeholder fence | TIA |
-| `plc/DB_SrlLane.db` | the staging window | TIA |
-| `plc/DB_HMI.db`, `plc/DB_Scanner.db` | HMI and scanner tags | TIA |
-| `plc/FC_AddRow.scl` | appends one row, fence checked | TIA |
-| `plc/FC_GenRect.scl` | rectangle into rows, lanes, time estimate | TIA |
-| `plc/FB_SrlMove.scl` | one move: window, commit, start, wait, verify | TIA, instance inside FB_ScanJob |
-| `plc/FB_ScanJob.scl` | walks the rows, retract, scanner, pause, step, fault | TIA, one instance `DB_ScanJob` |
-| `plc/OB30_srl_window.scl` | the network that ships the window | OB30, network 2 |
-| `plc/OB1_networks.scl` | networks 4 to 6 of OB1 | OB1 |
+| `plc/BGE_Scan.scl` | one external source, generates every block below | TIA, external source files |
+
+What `BGE_Scan.scl` generates, in this order:
+
+| Block | What it is |
+| --- | --- |
+| `UDT_Pose5` | X Y Z RotZ RotY |
+| `UDT_Fence` | min and max per axis |
+| `UDT_Row` | one row: pose, block, speed, radius, scan on, measure |
+| `UDT_Job` | count, row index, status, error, lanes, time, fence, 80 rows |
+| `UDT_ScanRect` | the rectangle parameters |
+| `UDT_SrlLane` | pose words, parameter words, gates, commit |
+| `UDT_HMI` | press bits, switches, test pose, check result |
+| `DB_Scan` | the rectangle with standard values, **set retentive** |
+| `DB_Job` | the list, with a placeholder fence |
+| `DB_SrlLane` | the staging window |
+| `DB_HMI` | the HMI tags |
+| `FC_AddRow` | appends one row, fence checked |
+| `FC_GenRect` | rectangle into rows, lanes, time estimate |
+| `FB_SrlMove` | one move: window, commit, start, wait, verify |
+| `FB_ScanJob` | walks the rows, retract, scanner, pause, step, fault |
+| `DB_ScanJob` | the one instance of FB_ScanJob, holds the FB_SrlMove instance inside |
+| `FC_SrlWindow` | **you call this in OB30**, ships the window to the module 2 pins |
+| `FC_ScanControl` | **you call this in OB1**, HMI presses, job, outputs for the arbiter and the scanner |
+
+The two FCs have pins. Your own tags go on the pins, in LAD, at the two calls. Nothing inside the source has to be renamed.
 
 ---
 
@@ -61,21 +71,36 @@ Also: the STO reading active with the chain closed (open point 8 of the status p
 
 ---
 
-## 4. Names: mine to yours
+## 4. The pins and what to connect
 
-The PLC sources use placeholder names for things that already exist in your project. Rename in the sources before generating, or map after.
+The source never names anything from your project. Everything project specific is a pin on one of the two FCs.
 
-| In the sources | Your project |
-| --- | --- |
-| `"DB_Mode".Auto` | the Auto bit of your mode DB |
-| `"DB_Machine".Ready`, `.MissingNo` | the outputs of `FB_MachineReady` |
-| `"DB_Robot".Status.ProgFinished` | PI 2.5 as mapped by `FC_RobotStatusMap` |
-| `"DB_Robot".Status.Fault`, `.CommOk` | robot fault bit, communication ok from the module FB |
-| `"DB_Robot".Status.ActPose` | the actual pose words from PI, same frame as POSE[51] |
-| `"DB_Robot".Status.SrlRealRaw[1..16]` | your `SrlRealRaw` |
-| `"DB_RobotCmd".Auto.Start`, `.ProgNo`, `.Stop` | the automatic requests your arbiter reads |
-| `"DB_MOVIKIT_ROBOTICS_Module2".Pose`, `.Param`, `.WrBool`, `.PoseEnable` | the pins of the v0.7 module 2 FB |
-| `"DB_Scanner"` | the real scanner interface, when it exists |
+### `FC_SrlWindow`, called in OB30
+
+| Pin | Type | Connect to |
+| --- | --- | --- |
+| `io_iPose1 .. io_iPose5` | Int, in-out | the five pose pins of the module 2 FB, words 114 to 118 |
+| `io_iPar1 .. io_iPar4` | Int, in-out | the four parameter pins, words 119 to 122 |
+| `io_xBool1 .. io_xBool8` | Bool, in-out | `WrBool1..8`, word 123 |
+| `io_xPoseEnable` | Bool, in-out | `PoseEnable` |
+
+If the module 2 pins are `Word`, not `Int`, change the pin types in the source to `Word` and wrap the assignments in `INT_TO_WORD`. In-out pins need the same type on both sides.
+
+### `FC_ScanControl`, called in OB1
+
+| Pin | Type | Connect to |
+| --- | --- | --- |
+| `i_xAuto` | Bool | the Auto bit of your mode DB. A drop aborts the job |
+| `i_xMachineReady` | Bool | READY TO START from `FB_MachineReady` |
+| `i_xProgFinished` | Bool | PI 2.5 `program_finished`, from `FC_RobotStatusMap` |
+| `i_xRobotFault` | Bool | the robot fault bit |
+| `i_xCommOk` | Bool | communication ok from the module FB |
+| `i_iReal71`, `i_iReal73` | Int | `SrlRealRaw[1]` and `SrlRealRaw[3]` |
+| `i_iActX .. i_iActRotY` | Int | the five actual pose words from PI, same frame as POSE[51] |
+| `i_xMeasDone` | Bool | scanner: measurement finished. Tie to TRUE until a scanner exists |
+| `o_xStart`, `o_iProgNo`, `o_xStop` | Bool, Int, Bool | the automatic requests your arbiter reads |
+| `o_xScanOn`, `o_xMeasTrigger`, `o_iRowTag` | Bool, Bool, Int | the scanner, or nothing yet |
+| `o_iJobStatus`, `o_iJobError` | Int | spare copies for alarms, the HMI reads `DB_Job` directly |
 
 ---
 
@@ -120,36 +145,30 @@ Also in the robot: blending 0 for these moves, program 20 selectable by number, 
 
 ## 6. Step 2 — the PLC: import and generate
 
-In TIA: *External source files → Add new external file*, select the files, right click → *Generate blocks from source*. Generate in this order, each group compiles before the next:
+In TIA, in the PLC: *External source files → Add new external file* → pick `plc/BGE_Scan.scl`. Right click the file → *Generate blocks from source*. The blocks of section 2 appear under Program blocks and PLC data types, in dependency order, from one file.
 
-1. `UDT_Pose5`, `UDT_Fence`, `UDT_Row`, `UDT_Job`, `UDT_ScanRect`, `UDT_SrlLane`, `UDT_HMI`, `UDT_Scanner`
-2. `DB_Scan`, `DB_Job`, `DB_SrlLane`, `DB_HMI`, `DB_Scanner`
-3. `FC_AddRow`, then `FC_GenRect`
-4. `FB_SrlMove`, then `FB_ScanJob`
+Then:
 
-Then: `DB_Scan` → properties → retentive. Put the real fence into `DB_Job.Fence`, read from the robot soft limits, a few millimetres inside them.
+- `DB_Scan` → properties → retentive.
+- `DB_Job.Fence`: put the real envelope in, read from the robot soft limits, a few millimetres inside them.
 
-**Done when:** the project compiles with 0 errors. `FB_SrlMove` has no instance DB of its own; it lives inside `DB_ScanJob`.
+**Done when:** the project compiles with 0 errors and the two FCs `FC_SrlWindow` and `FC_ScanControl` are in the block list. `FB_SrlMove` has no instance DB of its own; it lives inside `DB_ScanJob`.
+
+If generation stops with an error, it names the line. The two usual causes are a `Word` versus `Int` mismatch on the module 2 pins (section 4) and a block of the same name already in the project.
 
 ---
 
 ## 7. Step 3 — OB30: the window ship
 
-OB30 keeps its four networks. Insert this as **network 2**, between the handshake toggle and the module 1 FB, so the same pass transmits the window:
+OB30 keeps its four networks. Insert a new **network 2**, between the handshake toggle and the module 1 FB, with one call:
 
-```scl
-// ob30 network 2: ship the srl window in one pass, only when fb_srlmove has committed it
-// this is the only place that writes the pose, parameter and gate pins of module 2
-IF "DB_SrlLane".Commit THEN
-   "DB_MOVIKIT_ROBOTICS_Module2".Pose := "DB_SrlLane".Pose;        // pose 51, words 114..118
-   "DB_MOVIKIT_ROBOTICS_Module2".Param := "DB_SrlLane".Par;        // real 51..54, words 119..122
-   "DB_MOVIKIT_ROBOTICS_Module2".WrBool := "DB_SrlLane".Gate;      // bool 51..58, word 123
-   "DB_MOVIKIT_ROBOTICS_Module2".PoseEnable := TRUE;
-   "DB_SrlLane".Commit := FALSE;
-END_IF;
+```
+"FC_SrlWindow"   (LAD box, or in SCL: "FC_SrlWindow"(io_iPose1 := ..., ...);)
 ```
 
-Remove any other writer of those pins (the old `FC_SrlGates` path). OB30 order afterwards: handshake, window, module 1 FB, module 2 FB, status map.
+Connect its 18 in-out pins to the pose, parameter, `WrBool1..8` and `PoseEnable` pins of the module 2 FB, as in section 4. In LAD that is dragging the module 2 instance DB fields onto the box.
+
+Remove any other writer of those pins (the old `FC_SrlGates` path). OB30 order afterwards: handshake, `FC_SrlWindow`, module 1 FB, module 2 FB, status map. Network 2 before network 4 is what makes the same 10 ms pass transmit the window.
 
 **Done when:** in a watch table, write `DB_SrlLane.Pose[1] := 1234` and `Commit := TRUE`. Within one OB30 pass Commit is FALSE and the Process Data Monitor shows 1234 in word 114.
 
@@ -172,102 +191,19 @@ Do not map `motion_done` (PI 5.2) to anything the job reads.
 
 ---
 
-## 9. Step 5 — OB1: the three networks
+## 9. Step 5 — OB1: one call
 
-Paste after `FB_MachineReady` and before the arbiter. OB1 temps: `xStartJob : Bool`, `rTestSpeed : Real`.
+One new network after `FB_MachineReady` and before the arbiter, with one LAD box:
 
-```scl
-// 4a reset: only clears a fault, never touches a running job
-IF "DB_HMI".ResetFault THEN
-   "DB_HMI".ResetFault := FALSE;
-   IF "DB_Job".Status = 4 THEN
-      "DB_Job".Status := 0;
-      "DB_Job".Error := 0;
-   END_IF;
-END_IF;
-
-// 4b check: builds the list from the screen values, shows rows and lanes, starts nothing
-IF "DB_HMI".Check THEN
-   "DB_HMI".Check := FALSE;
-   IF "DB_Job".Status <> 1 AND "DB_Job".Status <> 2 THEN
-      "DB_HMI".CheckResult := "FC_GenRect"(i_scan := "DB_Scan", io_job := "DB_Job");
-   END_IF;
-END_IF;
-
-// 4c start: the list is built again from what is on the screen at the moment of the press
-#xStartJob := FALSE;
-IF "DB_HMI".StartScan THEN
-   "DB_HMI".StartScan := FALSE;
-   IF "DB_Job".Status <> 1 AND "DB_Job".Status <> 2 THEN
-      "DB_HMI".CheckResult := "FC_GenRect"(i_scan := "DB_Scan", io_job := "DB_Job");
-      IF "DB_HMI".CheckResult = 0 THEN
-         #xStartJob := TRUE;                 // one cycle, consumed in network 5
-      ELSE
-         "DB_Job".Status := 4;
-         "DB_Job".Error := 100 + "DB_HMI".CheckResult;   // 101 bad size, 102 too long, 103 outside the fence
-      END_IF;
-   END_IF;
-END_IF;
-
-// 4d test move: one row from the test pose, through the same path as production
-IF "DB_HMI".TestMove THEN
-   "DB_HMI".TestMove := FALSE;
-   IF "DB_Job".Status <> 1 AND "DB_Job".Status <> 2 THEN
-      IF "DB_HMI".TestBlock = 2 THEN
-         #rTestSpeed := "DB_Scan".Vscan;
-      ELSE
-         #rTestSpeed := "DB_Scan".Vmove;
-      END_IF;
-      "DB_Job".Count := 0;
-      "DB_HMI".CheckResult := "FC_AddRow"(i_rX := "DB_HMI".TestPose.X,
-                                          i_rY := "DB_HMI".TestPose.Y,
-                                          i_rZ := "DB_HMI".TestPose.Z,
-                                          i_rRotZ := "DB_HMI".TestPose.RotZ,
-                                          i_rRotY := "DB_HMI".TestPose.RotY,
-                                          i_iBlock := "DB_HMI".TestBlock,
-                                          i_rSpeed := #rTestSpeed,
-                                          i_xScanOn := FALSE,
-                                          i_xMeasure := FALSE,
-                                          i_fence := "DB_Job".Fence,
-                                          io_rows := "DB_Job".Rows,
-                                          io_n := "DB_Job".Count);
-      IF "DB_HMI".CheckResult = 0 THEN
-         #xStartJob := TRUE;
-      END_IF;
-   END_IF;
-END_IF;
-
-// 5 the job, one instance, it owns the one fb_srlmove instance inside it
-"DB_ScanJob"(i_xStart := #xStartJob,
-             i_xPause := "DB_HMI".Pause,
-             i_xStepMode := "DB_HMI".StepMode,
-             i_xNext := "DB_HMI".Next,
-             i_xAbort := "DB_HMI".Abort OR NOT "DB_Mode".Auto,
-             i_xMachineReady := "DB_Machine".Ready,
-             i_actPose := "DB_Robot".Status.ActPose,
-             i_rZsafe := "DB_Scan".Zsafe,
-             i_rVmove := "DB_Scan".Vmove,
-             i_xMeasDone := "DB_Scanner".MeasDone,
-             i_xProgFinished := "DB_Robot".Status.ProgFinished,
-             i_xRobotFault := "DB_Robot".Status.Fault,
-             i_xCommOk := "DB_Robot".Status.CommOk,
-             i_iReal71 := "DB_Robot".Status.SrlRealRaw[1],
-             i_iReal73 := "DB_Robot".Status.SrlRealRaw[3],
-             io_job := "DB_Job",
-             io_lane := "DB_SrlLane");
-"DB_HMI".Next := FALSE;
-"DB_HMI".Abort := FALSE;
-
-// 6 the requests of the automatic side, the arbiter decides whether they reach the robot
-"DB_RobotCmd".Auto.Start := "DB_ScanJob".o_xStart;
-"DB_RobotCmd".Auto.ProgNo := "DB_ScanJob".o_iProgNo;
-"DB_RobotCmd".Auto.Stop := "DB_ScanJob".o_xFault;
-"DB_Scanner".ScanOn := "DB_ScanJob".o_xScanOn;
-"DB_Scanner".Trigger := "DB_ScanJob".o_xMeasTrigger;
-"DB_Scanner".RowTag := "DB_Job".RowIdx;
+```
+"FC_ScanControl"
 ```
 
-In the arbiter: in Auto, copy `Auto.Start`, `Auto.ProgNo` and `Auto.Stop` to the robot pins. In Hand and Standby, Start stays FALSE whatever the job asks. Start is a level, held by `FB_SrlMove` until `program_finished` falls.
+Connect the pins as in section 4. Inputs come from your mode DB, `FB_MachineReady`, `DB_Robot.Status` and the scanner. Outputs `o_xStart`, `o_iProgNo` and `o_xStop` go to the automatic requests your arbiter reads. `o_xScanOn`, `o_xMeasTrigger` and `o_iRowTag` go to the scanner, or stay open until it exists. Until a scanner exists, tie `i_xMeasDone` to TRUE.
+
+Inside the call, every cycle: the press bits are read and cleared, CHECK or START builds the list with `FC_GenRect`, TEST MOVE builds a one-row list, `DB_ScanJob` runs, and the outputs are copied. The HMI never needs anything from the pins: it reads and writes `DB_HMI`, `DB_Scan` and `DB_Job` directly.
+
+In the arbiter: in Auto, copy the three requests to the robot pins. In Hand and Standby, Start stays FALSE whatever the job asks. Start is a level, held by `FB_SrlMove` until `program_finished` falls.
 
 **Done when:** the project compiles. In Standby, a Test Move ends with error 1 after 2 s and nothing moved: the arbiter blocked the Start, the timeout caught it.
 
@@ -347,8 +283,7 @@ A commissioning screen holds: `Vscan`, `Vmove`, the fence, the override, test mo
 | DB_Robot.Status.ProgFinished, ProgNo, Override | mixed | read | diagnostics | commissioning |
 | DB_Robot.Status.SrlRealRaw[1], [3] | Int | read | block that ran, run number echo | commissioning |
 | DB_SrlLane.Pose[1..5] | Int | read | the target on the bus | operator |
-| DB_Scanner.ScanOn, Trigger, Ready, Error, MeasDone | Bool | read | scanner lamps | operator |
-| DB_Scanner.RowTag | Int | read | row the data is tagged with | commissioning |
+| scanner tags, from the `FC_ScanControl` pins | Bool, Int | read | scanner lamps and the row the data is tagged with | operator |
 
 ### Text lists
 
@@ -388,7 +323,7 @@ Before row 1 the job moves straight up to Zsafe from the actual position, unless
 
 1. **OB1.** `FB_ScanJob` loads the row, pulses exec. `FB_SrlMove` writes Pose, Par (radius, run number), one gate, then Commit. Timeout computed from the distance to the last target.
 2. **OB30.** Network 2 sees Commit, copies the window to the pins, clears Commit. Network 4 sends it.
-3. **OB1.** `FB_SrlMove` sees Commit FALSE, raises Start. Network 6 and the arbiter pass it to `Out.Start`, program 20.
+3. **OB1.** `FB_SrlMove` sees Commit FALSE, raises Start. The `FC_ScanControl` output and the arbiter pass it to the robot Start pin, program 20.
 4. **OB30.** Module 1 sends Start. The robot starts the program, `program_finished` falls.
 5. **OB1.** `FB_SrlMove` sees it fall: the start was taken. Start drops. Timer 2 s stops, move timer runs.
 6. **Robot.** REAL[71] := 0, the gated block runs, blocking. REAL[71] := n, REAL[73] := run number. Program ends, `program_finished` rises. The echo is on the bus before or with the flag.
@@ -402,15 +337,15 @@ Per row the PLC adds about three OB30 passes and three OB1 cycles, on top of the
 | Data | Only writer | Where |
 | --- | --- | --- |
 | DB_Scan | HMI | screen |
-| DB_Job rows, count, lanes, time | FC_GenRect | OB1 network 4 |
-| DB_Job RowIdx, Status, Error | FB_ScanJob, and the reset in 4a | OB1 |
-| DB_SrlLane | FB_SrlMove inside FB_ScanJob | OB1 network 5 |
-| Module 2 setpoint pins | window ship | OB30 network 2 |
-| DB_RobotCmd.Auto | network 6 | OB1 |
-| DB_RobotCmd.Out | arbiter | OB1 network 7 |
+| DB_Job rows, count, lanes, time | FC_GenRect, inside FC_ScanControl | OB1 |
+| DB_Job RowIdx, Status, Error | FB_ScanJob, and the reset inside FC_ScanControl | OB1 |
+| DB_SrlLane | FB_SrlMove inside FB_ScanJob | OB1 |
+| Module 2 setpoint pins | FC_SrlWindow | OB30 network 2 |
+| Automatic requests to the arbiter | the FC_ScanControl outputs | OB1 |
+| Robot pins | arbiter | OB1 |
 | Module 1 control words | module 1 FB | OB30 |
 | DB_Robot.Status | FC_RobotStatusMap | OB30 |
-| DB_HMI press bits | HMI sets, OB1 clears | both |
+| DB_HMI press bits | HMI sets, FC_ScanControl clears | both |
 
 ### When something goes wrong
 

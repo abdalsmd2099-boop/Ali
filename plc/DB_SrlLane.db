@@ -1,9 +1,0 @@
-DATA_BLOCK "DB_SrlLane"
-{ S7_Optimized_Access := 'TRUE' }
-VERSION : 0.1
-NON_RETAIN
-"UDT_SrlLane"
-
-BEGIN
-
-END_DATA_BLOCK
