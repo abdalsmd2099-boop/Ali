@@ -2,25 +2,74 @@
 // 1 device module slot 17, 2 fc_mode / fb_mode, 3 fb_machineready: existing, before this
 // 7 fb_sew_cmdarbiter, 8 fb_alarms and fb_stoprecord: existing, after this
 //
-// ob1 temps used here: xStartJob : Bool, iGen : Int
+// ob1 temps used here: xStartJob : Bool, rTestSpeed : Real
+// every press bit from the hmi is cleared here once the plc has seen it
 
-// 4 job start: the list is built from what is on the screen at the moment of the press
-#xStartJob := FALSE;
-IF "DB_HMI".StartScan AND NOT "DB_HMI".StartScanOld
-   AND "DB_Job".Status <> 1 AND "DB_Job".Status <> 2 THEN
-   #iGen := "FC_GenRect"(i_scan := "DB_Scan", io_job := "DB_Job");
-   IF #iGen = 0 THEN
-      #xStartJob := TRUE;                 // one cycle, consumed in network 5
-   ELSE
-      "DB_Job".Status := 4;
-      "DB_Job".Error := 100 + #iGen;      // 101 bad size, 102 too long, 103 outside the fence
+// 4a reset: only clears a fault, never touches a running job
+IF "DB_HMI".ResetFault THEN
+   "DB_HMI".ResetFault := FALSE;
+   IF "DB_Job".Status = 4 THEN
+      "DB_Job".Status := 0;
+      "DB_Job".Error := 0;
    END_IF;
 END_IF;
-"DB_HMI".StartScanOld := "DB_HMI".StartScan;
+
+// 4b check: builds the list from the screen values, shows rows and lanes, starts nothing
+IF "DB_HMI".Check THEN
+   "DB_HMI".Check := FALSE;
+   IF "DB_Job".Status <> 1 AND "DB_Job".Status <> 2 THEN
+      "DB_HMI".CheckResult := "FC_GenRect"(i_scan := "DB_Scan", io_job := "DB_Job");
+   END_IF;
+END_IF;
+
+// 4c start: the list is built again from what is on the screen at the moment of the press
+#xStartJob := FALSE;
+IF "DB_HMI".StartScan THEN
+   "DB_HMI".StartScan := FALSE;
+   IF "DB_Job".Status <> 1 AND "DB_Job".Status <> 2 THEN
+      "DB_HMI".CheckResult := "FC_GenRect"(i_scan := "DB_Scan", io_job := "DB_Job");
+      IF "DB_HMI".CheckResult = 0 THEN
+         #xStartJob := TRUE;                 // one cycle, consumed in network 5
+      ELSE
+         "DB_Job".Status := 4;
+         "DB_Job".Error := 100 + "DB_HMI".CheckResult;   // 101 bad size, 102 too long, 103 outside the fence
+      END_IF;
+   END_IF;
+END_IF;
+
+// 4d test move: one row from the test pose, through the same path as production
+IF "DB_HMI".TestMove THEN
+   "DB_HMI".TestMove := FALSE;
+   IF "DB_Job".Status <> 1 AND "DB_Job".Status <> 2 THEN
+      IF "DB_HMI".TestBlock = 2 THEN
+         #rTestSpeed := "DB_Scan".Vscan;
+      ELSE
+         #rTestSpeed := "DB_Scan".Vmove;
+      END_IF;
+      "DB_Job".Count := 0;
+      "DB_HMI".CheckResult := "FC_AddRow"(i_rX := "DB_HMI".TestPose.X,
+                                          i_rY := "DB_HMI".TestPose.Y,
+                                          i_rZ := "DB_HMI".TestPose.Z,
+                                          i_rRotZ := "DB_HMI".TestPose.RotZ,
+                                          i_rRotY := "DB_HMI".TestPose.RotY,
+                                          i_iBlock := "DB_HMI".TestBlock,
+                                          i_rSpeed := #rTestSpeed,
+                                          i_xScanOn := FALSE,
+                                          i_xMeasure := FALSE,
+                                          i_fence := "DB_Job".Fence,
+                                          io_rows := "DB_Job".Rows,
+                                          io_n := "DB_Job".Count);
+      IF "DB_HMI".CheckResult = 0 THEN
+         #xStartJob := TRUE;
+      END_IF;
+   END_IF;
+END_IF;
 
 // 5 the job, one instance, it owns the one fb_srlmove instance inside it
 "DB_ScanJob"(i_xStart := #xStartJob,
              i_xPause := "DB_HMI".Pause,
+             i_xStepMode := "DB_HMI".StepMode,
+             i_xNext := "DB_HMI".Next,
              i_xAbort := "DB_HMI".Abort OR NOT "DB_Mode".Auto,
              i_xMachineReady := "DB_Machine".Ready,
              i_actPose := "DB_Robot".Status.ActPose,
@@ -34,6 +83,8 @@ END_IF;
              i_iReal73 := "DB_Robot".Status.SrlRealRaw[3],
              io_job := "DB_Job",
              io_lane := "DB_SrlLane");
+"DB_HMI".Next := FALSE;
+"DB_HMI".Abort := FALSE;
 
 // 6 the requests of the automatic side, the arbiter decides whether they reach the robot
 "DB_RobotCmd".Auto.Start := "DB_ScanJob".o_xStart;
@@ -41,3 +92,4 @@ END_IF;
 "DB_RobotCmd".Auto.Stop := "DB_ScanJob".o_xFault;
 "DB_Scanner".ScanOn := "DB_ScanJob".o_xScanOn;
 "DB_Scanner".Trigger := "DB_ScanJob".o_xMeasTrigger;
+"DB_Scanner".RowTag := "DB_Job".RowIdx;

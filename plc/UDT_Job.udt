@@ -5,6 +5,8 @@ VERSION : 0.1
       RowIdx : Int;                      // row running now, 0 = none
       Status : Int;                      // 0 idle, 1 running, 2 paused, 3 done, 4 fault
       Error : Int;                       // error number of the last fault
+      Lanes : Int;                       // for the screen, from the generator
+      EstTimeS : Int;                    // rough job time in s, from the generator
       Fence : "UDT_Fence";
       Rows : Array[1..80] of "UDT_Row";
    END_STRUCT;

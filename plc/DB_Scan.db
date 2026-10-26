@@ -14,6 +14,7 @@ BEGIN
    Ly := 200.0;
    Py := 50.0;
    Px := 0.0;
+   Over := 20.0;
    Vscan := 50.0;
    Vmove := 200.0;
    Zsafe := 600.0;

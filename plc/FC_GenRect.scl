@@ -23,6 +23,12 @@ VERSION : 0.1
       rXs : Real;
       rXe : Real;
       rDir : Real;
+      rOver : Real;
+      rX0s : Real;
+      rSec : Real;
+      rDx : Real;
+      rDy : Real;
+      rDz : Real;
       xPointMode : Bool;
    END_VAR
 
@@ -33,13 +39,21 @@ BEGIN
 
    // whole mm only, the bus carries no decimals, the hmi limits keep the operator inside that
    IF #i_scan.Lx <= 0.0 OR #i_scan.Ly <= 0.0 OR #i_scan.Py <= 0.0 OR #i_scan.Px < 0.0
-      OR #i_scan.Vscan <= 0.0 OR #i_scan.Vmove <= 0.0
+      OR #i_scan.Over < 0.0 OR #i_scan.Vscan <= 0.0 OR #i_scan.Vmove <= 0.0
       OR #i_scan.Zsafe <= #i_scan.Z0 THEN
       #FC_GenRect := 1;
       RETURN;
    END_IF;
 
    #xPointMode := #i_scan.Px > 0.0;
+
+   // overscan only on the slow lanes: the gantry is at speed when it enters the rectangle
+   IF #xPointMode THEN
+      #rOver := 0.0;
+   ELSE
+      #rOver := #i_scan.Over;
+   END_IF;
+   #rX0s := #i_scan.X0 - #rOver;
 
    // lanes across the rectangle, the last lane lies on or inside the far edge
    #iLanes := 1;
@@ -55,8 +69,8 @@ BEGIN
       END_WHILE;
    END_IF;
 
-   // approach: above the first corner at safe height, then straight down to scan height
-   #iErr := "FC_AddRow"(i_rX := #i_scan.X0,
+   // approach: above the start of lane 0 at safe height, then straight down to scan height
+   #iErr := "FC_AddRow"(i_rX := #rX0s,
                         i_rY := #i_scan.Y0,
                         i_rZ := #i_scan.Zsafe,
                         i_rRotZ := #i_scan.RotZ,
@@ -69,7 +83,7 @@ BEGIN
                         io_rows := #io_job.Rows,
                         io_n := #io_job.Count);
    IF #iErr = 0 THEN
-      #iErr := "FC_AddRow"(i_rX := #i_scan.X0,
+      #iErr := "FC_AddRow"(i_rX := #rX0s,
                            i_rY := #i_scan.Y0,
                            i_rZ := #i_scan.Z0,
                            i_rRotZ := #i_scan.RotZ,
@@ -92,12 +106,12 @@ BEGIN
 
       // even lanes run +x, odd lanes run back -x, so the gantry never crosses the rectangle
       IF (#iLane MOD 2) = 0 THEN
-         #rXs := #i_scan.X0;
-         #rXe := #i_scan.X0 + #i_scan.Lx;
+         #rXs := #i_scan.X0 - #rOver;
+         #rXe := #i_scan.X0 + #i_scan.Lx + #rOver;
          #rDir := 1.0;
       ELSE
-         #rXs := #i_scan.X0 + #i_scan.Lx;
-         #rXe := #i_scan.X0;
+         #rXs := #i_scan.X0 + #i_scan.Lx + #rOver;
+         #rXe := #i_scan.X0 - #rOver;
          #rDir := -1.0;
       END_IF;
 
@@ -173,6 +187,20 @@ BEGIN
 
    IF #iErr <> 0 THEN
       #io_job.Count := 0;
+      #io_job.Lanes := 0;
+      #io_job.EstTimeS := 0;
+   ELSE
+      // rough job time for the screen: path over speed, plus start and finish of every row
+      // the first retract from wherever the gantry stands is a guess
+      #io_job.Lanes := #iLanes;
+      #rSec := 5.0;
+      FOR #iK := 2 TO #io_job.Count DO
+         #rDx := #io_job.Rows[#iK].Pose.X - #io_job.Rows[#iK - 1].Pose.X;
+         #rDy := #io_job.Rows[#iK].Pose.Y - #io_job.Rows[#iK - 1].Pose.Y;
+         #rDz := #io_job.Rows[#iK].Pose.Z - #io_job.Rows[#iK - 1].Pose.Z;
+         #rSec := #rSec + SQRT(#rDx * #rDx + #rDy * #rDy + #rDz * #rDz) / #io_job.Rows[#iK].Speed + 0.3;
+      END_FOR;
+      #io_job.EstTimeS := REAL_TO_INT(#rSec);
    END_IF;
    #FC_GenRect := #iErr;
 END_FUNCTION

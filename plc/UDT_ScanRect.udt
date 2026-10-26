@@ -10,6 +10,7 @@ VERSION : 0.1
       Ly : Real;      // rectangle size along y, mm
       Py : Real;      // lane pitch, mm
       Px : Real;      // point pitch along a lane, 0 = one slow line per lane
+      Over : Real;    // overscan, mm, a slow lane starts and ends this far outside the rectangle
       Vscan : Real;   // mm/s of the slow lin block in the robot
       Vmove : Real;   // mm/s of the fast lin block in the robot
       Zsafe : Real;   // retract height, mm

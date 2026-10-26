@@ -7,6 +7,8 @@ VERSION : 0.1
    VAR_INPUT
       i_xStart : Bool;           // rising edge
       i_xPause : Bool;           // finishes the current row, then holds
+      i_xStepMode : Bool;        // commissioning: one row per next
+      i_xNext : Bool;            // one cycle
       i_xAbort : Bool;
       i_xMachineReady : Bool;    // from fb_machineready
       i_actPose : "UDT_Pose5";   // actual position from db_robot.status, whole mm
@@ -75,19 +77,24 @@ BEGIN
          END_IF;
 
       10: // the first move is always straight up to safe height, from wherever the gantry stands
+          // skipped when it already stands there, a zero length lin is not worth the risk
          #o_xBusy := TRUE;
-         #row.Pose := #i_actPose;
-         #row.Pose.Z := #i_rZsafe;
-         #row.Block := 1;
-         #row.Speed := #i_rVmove;
-         #row.Radius := 0.0;
-         #row.ScanOn := FALSE;
-         #row.Measure := FALSE;
-         #xExec := TRUE;
-         #iState := 30;
+         IF ABS(#i_actPose.Z - #i_rZsafe) < 2.0 THEN
+            #iState := 20;
+         ELSE
+            #row.Pose := #i_actPose;
+            #row.Pose.Z := #i_rZsafe;
+            #row.Block := 1;
+            #row.Speed := #i_rVmove;
+            #row.Radius := 0.0;
+            #row.ScanOn := FALSE;
+            #row.Measure := FALSE;
+            #xExec := TRUE;
+            #iState := 30;
+         END_IF;
 
-      20: // next row, or hold here while paused
-         IF #i_xPause THEN
+      20: // next row, or hold here while paused or waiting for next in step mode
+         IF #i_xPause OR (#i_xStepMode AND NOT #i_xNext) THEN
             #io_job.Status := 2;
          ELSIF #io_job.RowIdx >= #io_job.Count THEN
             #iState := 60;
