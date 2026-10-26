@@ -205,7 +205,7 @@ Inside the call, every cycle: the press bits are read and cleared, CHECK or STAR
 
 In the arbiter: in Auto, copy the three requests to the robot pins. In Hand and Standby, Start stays FALSE whatever the job asks. Start is a level, held by `FB_SrlMove` until `program_finished` falls.
 
-**Done when:** the project compiles. In Standby, a Test Move ends with error 1 after 2 s and nothing moved: the arbiter blocked the Start, the timeout caught it.
+**Done when:** the project compiles. In Standby, a Test Move ends at once with error 6 and nothing moved: `i_xAuto` is FALSE, so the job aborts in its first cycle before any window is written.
 
 ---
 
@@ -366,7 +366,7 @@ Each test passes before the next. Override 10 % until T8.
 | --- | --- | --- |
 | T1 | CHECK with the standard rectangle | `CheckResult` 0, `Count` 12, `Lanes` 5, rows as in section 11, no motion |
 | T2 | CHECK with Zsafe below Z0, then with X0 outside the fence | `CheckResult` 1, then 3, `Count` 0 both times |
-| T3 | Test Move in **Standby** to a safe pose | error 1 after 2 s, nothing moved, words 114 to 123 show the pose and gate 1 |
+| T3 | Test Move in **Standby** to a safe pose | error 6 at once, Status 4, nothing moved, gates in word 123 all 0 |
 | T4 | Test Move in Auto, block 1, safe pose | gantry moves once, `SrlRealRaw[1]` = 1, `[3]` = run number, Status 3 |
 | T5 | Same Test Move again, same pose | no fault from the zero-length LIN, or you know you need the skip in every case |
 | T6 | Test Move block 2 | moves at the slow speed, `SrlRealRaw[1]` = 2 |
