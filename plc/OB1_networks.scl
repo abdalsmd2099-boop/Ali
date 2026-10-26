@@ -1,0 +1,43 @@
+// ob1, the networks that belong to the scan, in this order, every cycle
+// 1 device module slot 17, 2 fc_mode / fb_mode, 3 fb_machineready: existing, before this
+// 7 fb_sew_cmdarbiter, 8 fb_alarms and fb_stoprecord: existing, after this
+//
+// ob1 temps used here: xStartJob : Bool, iGen : Int
+
+// 4 job start: the list is built from what is on the screen at the moment of the press
+#xStartJob := FALSE;
+IF "DB_HMI".StartScan AND NOT "DB_HMI".StartScanOld
+   AND "DB_Job".Status <> 1 AND "DB_Job".Status <> 2 THEN
+   #iGen := "FC_GenRect"(i_scan := "DB_Scan", io_job := "DB_Job");
+   IF #iGen = 0 THEN
+      #xStartJob := TRUE;                 // one cycle, consumed in network 5
+   ELSE
+      "DB_Job".Status := 4;
+      "DB_Job".Error := 100 + #iGen;      // 101 bad size, 102 too long, 103 outside the fence
+   END_IF;
+END_IF;
+"DB_HMI".StartScanOld := "DB_HMI".StartScan;
+
+// 5 the job, one instance, it owns the one fb_srlmove instance inside it
+"DB_ScanJob"(i_xStart := #xStartJob,
+             i_xPause := "DB_HMI".Pause,
+             i_xAbort := "DB_HMI".Abort OR NOT "DB_Mode".Auto,
+             i_xMachineReady := "DB_Machine".Ready,
+             i_actPose := "DB_Robot".Status.ActPose,
+             i_rZsafe := "DB_Scan".Zsafe,
+             i_rVmove := "DB_Scan".Vmove,
+             i_xMeasDone := "DB_Scanner".MeasDone,
+             i_xProgFinished := "DB_Robot".Status.ProgFinished,
+             i_xRobotFault := "DB_Robot".Status.Fault,
+             i_xCommOk := "DB_Robot".Status.CommOk,
+             i_iReal71 := "DB_Robot".Status.SrlRealRaw[1],
+             i_iReal73 := "DB_Robot".Status.SrlRealRaw[3],
+             io_job := "DB_Job",
+             io_lane := "DB_SrlLane");
+
+// 6 the requests of the automatic side, the arbiter decides whether they reach the robot
+"DB_RobotCmd".Auto.Start := "DB_ScanJob".o_xStart;
+"DB_RobotCmd".Auto.ProgNo := "DB_ScanJob".o_iProgNo;
+"DB_RobotCmd".Auto.Stop := "DB_ScanJob".o_xFault;
+"DB_Scanner".ScanOn := "DB_ScanJob".o_xScanOn;
+"DB_Scanner".Trigger := "DB_ScanJob".o_xMeasTrigger;
