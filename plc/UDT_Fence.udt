@@ -1,0 +1,12 @@
+TYPE "UDT_Fence"
+VERSION : 0.1
+   STRUCT
+      Xmin : Real;   // mm, inside the soft limits of the robot
+      Xmax : Real;
+      Ymin : Real;
+      Ymax : Real;
+      Zmin : Real;
+      Zmax : Real;
+   END_STRUCT;
+
+END_TYPE

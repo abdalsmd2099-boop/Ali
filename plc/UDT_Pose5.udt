@@ -1,0 +1,11 @@
+TYPE "UDT_Pose5"
+VERSION : 0.1
+   STRUCT
+      X : Real;      // mm
+      Y : Real;      // mm
+      Z : Real;      // mm
+      RotZ : Real;   // deg
+      RotY : Real;   // deg
+   END_STRUCT;
+
+END_TYPE

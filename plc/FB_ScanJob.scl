@@ -1,0 +1,161 @@
+FUNCTION_BLOCK "FB_ScanJob"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// runs the rows of one job, one move at a time
+// always retracts first, drives the scanner on the slow lanes, stops on the first error
+// the robot stop on o_xfault is done by the mode logic, not here
+   VAR_INPUT
+      i_xStart : Bool;           // rising edge
+      i_xPause : Bool;           // finishes the current row, then holds
+      i_xAbort : Bool;
+      i_xMachineReady : Bool;    // from fb_machineready
+      i_actPose : "UDT_Pose5";   // actual position from db_robot.status, whole mm
+      i_rZsafe : Real;
+      i_rVmove : Real;
+      i_xMeasDone : Bool;        // the scanner finished the single measurement
+      i_xProgFinished : Bool;
+      i_xRobotFault : Bool;
+      i_xCommOk : Bool;
+      i_iReal71 : Int;
+      i_iReal73 : Int;
+   END_VAR
+
+   VAR_OUTPUT
+      o_xStart : Bool;           // to the arbiter
+      o_iProgNo : Int;
+      o_xScanOn : Bool;          // the scanner records while true
+      o_xMeasTrigger : Bool;     // one measurement, held until measdone
+      o_xBusy : Bool;
+      o_xDone : Bool;            // one cycle
+      o_xFault : Bool;
+      o_iError : Int;            // 1..7 from fb_srlmove, 10 no job, 11 machine not ready, 12 measurement timeout
+   END_VAR
+
+   VAR_IN_OUT
+      io_job : "UDT_Job";
+      io_lane : "UDT_SrlLane";
+   END_VAR
+
+   VAR
+      iState : Int;
+      xStartOld : Bool;
+      xExec : Bool;
+      move : "FB_SrlMove";
+      row : "UDT_Row";
+      tonMeas : TON_TIME;
+   END_VAR
+
+
+BEGIN
+   #o_xDone := FALSE;
+   #tonMeas(IN := #iState = 40, PT := T#10s);
+
+   IF #i_xAbort AND #iState <> 0 AND #iState < 90 THEN
+      #o_iError := 6;
+      #iState := 90;
+   END_IF;
+
+   CASE #iState OF
+      0: // idle
+         #o_xBusy := FALSE;
+         IF #i_xStart AND NOT #xStartOld THEN
+            IF #io_job.Count = 0 THEN
+               #o_iError := 10;
+               #iState := 90;
+            ELSIF NOT #i_xMachineReady THEN
+               #o_iError := 11;
+               #iState := 90;
+            ELSE
+               #o_xFault := FALSE;
+               #o_iError := 0;
+               #io_job.RowIdx := 0;
+               #io_job.Status := 1;
+               #iState := 10;
+            END_IF;
+         END_IF;
+
+      10: // the first move is always straight up to safe height, from wherever the gantry stands
+         #o_xBusy := TRUE;
+         #row.Pose := #i_actPose;
+         #row.Pose.Z := #i_rZsafe;
+         #row.Block := 1;
+         #row.Speed := #i_rVmove;
+         #row.Radius := 0.0;
+         #row.ScanOn := FALSE;
+         #row.Measure := FALSE;
+         #xExec := TRUE;
+         #iState := 30;
+
+      20: // next row, or hold here while paused
+         IF #i_xPause THEN
+            #io_job.Status := 2;
+         ELSIF #io_job.RowIdx >= #io_job.Count THEN
+            #iState := 60;
+         ELSE
+            #io_job.Status := 1;
+            #io_job.RowIdx := #io_job.RowIdx + 1;
+            #row := #io_job.Rows[#io_job.RowIdx];
+            #o_xScanOn := #row.ScanOn;
+            #xExec := TRUE;
+            #iState := 30;
+         END_IF;
+
+      30: // the move runs in fb_srlmove
+         IF #move.o_xDone THEN
+            #o_xScanOn := FALSE;
+            IF #row.Measure THEN
+               #o_xMeasTrigger := TRUE;
+               #iState := 40;
+            ELSE
+               #iState := 20;
+            END_IF;
+         ELSIF #move.o_xError THEN
+            #o_xScanOn := FALSE;
+            #o_iError := #move.o_iError;
+            #iState := 90;
+         END_IF;
+
+      40: // one measurement at this point, the gantry stands still
+         IF #i_xMeasDone THEN
+            #o_xMeasTrigger := FALSE;
+            #iState := 20;
+         ELSIF #tonMeas.Q THEN
+            #o_xMeasTrigger := FALSE;
+            #o_iError := 12;
+            #iState := 90;
+         END_IF;
+
+      60: // job finished, the last row was the retract
+         #io_job.Status := 3;
+         #o_xDone := TRUE;
+         #iState := 0;
+
+      90: // fault, the gantry stays where it is, a new start retracts first
+         #o_xScanOn := FALSE;
+         #o_xMeasTrigger := FALSE;
+         #io_job.Status := 4;
+         #io_job.Error := #o_iError;
+         #o_xFault := TRUE;
+         #o_xBusy := FALSE;
+         #iState := 0;
+   END_CASE;
+
+   // the one move engine, called every cycle so its timers and edges work
+   #move(i_xExec := #xExec,
+         i_iBlock := #row.Block,
+         i_pose := #row.Pose,
+         i_rRadius := #row.Radius,
+         i_rSpeed := #row.Speed,
+         i_xAbort := #i_xAbort,
+         i_xProgFinished := #i_xProgFinished,
+         i_xRobotFault := #i_xRobotFault,
+         i_xCommOk := #i_xCommOk,
+         i_iReal71 := #i_iReal71,
+         i_iReal73 := #i_iReal73,
+         io_lane := #io_lane);
+   #xExec := FALSE;
+   #o_xStart := #move.o_xStart;
+   #o_iProgNo := #move.o_iProgNo;
+
+   #xStartOld := #i_xStart;
+END_FUNCTION_BLOCK

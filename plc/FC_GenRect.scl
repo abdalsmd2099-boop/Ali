@@ -1,0 +1,178 @@
+FUNCTION "FC_GenRect" : Int
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// builds the point list for one rectangle scan
+// rows: approach above the first corner, down, serpentine lanes, retract
+// returns 0 = ok, 1 = bad parameters, 2 = list full, 3 = point outside the fence
+// on any error the list is empty, a half list must never run
+   VAR_INPUT
+      i_scan : "UDT_ScanRect";
+   END_VAR
+
+   VAR_IN_OUT
+      io_job : "UDT_Job";
+   END_VAR
+
+   VAR_TEMP
+      iLanes : Int;
+      iLane : Int;
+      iPts : Int;
+      iK : Int;
+      iErr : Int;
+      rY : Real;
+      rXs : Real;
+      rXe : Real;
+      rDir : Real;
+      xPointMode : Bool;
+   END_VAR
+
+
+BEGIN
+   #io_job.Count := 0;
+   #io_job.RowIdx := 0;
+
+   // whole mm only, the bus carries no decimals, the hmi limits keep the operator inside that
+   IF #i_scan.Lx <= 0.0 OR #i_scan.Ly <= 0.0 OR #i_scan.Py <= 0.0 OR #i_scan.Px < 0.0
+      OR #i_scan.Vscan <= 0.0 OR #i_scan.Vmove <= 0.0
+      OR #i_scan.Zsafe <= #i_scan.Z0 THEN
+      #FC_GenRect := 1;
+      RETURN;
+   END_IF;
+
+   #xPointMode := #i_scan.Px > 0.0;
+
+   // lanes across the rectangle, the last lane lies on or inside the far edge
+   #iLanes := 1;
+   WHILE INT_TO_REAL(#iLanes) * #i_scan.Py <= #i_scan.Ly AND #iLanes < 80 DO
+      #iLanes := #iLanes + 1;
+   END_WHILE;
+
+   // points along one lane, point mode only
+   #iPts := 1;
+   IF #xPointMode THEN
+      WHILE INT_TO_REAL(#iPts) * #i_scan.Px <= #i_scan.Lx AND #iPts < 80 DO
+         #iPts := #iPts + 1;
+      END_WHILE;
+   END_IF;
+
+   // approach: above the first corner at safe height, then straight down to scan height
+   #iErr := "FC_AddRow"(i_rX := #i_scan.X0,
+                        i_rY := #i_scan.Y0,
+                        i_rZ := #i_scan.Zsafe,
+                        i_rRotZ := #i_scan.RotZ,
+                        i_rRotY := #i_scan.RotY,
+                        i_iBlock := 1,
+                        i_rSpeed := #i_scan.Vmove,
+                        i_xScanOn := FALSE,
+                        i_xMeasure := FALSE,
+                        i_fence := #io_job.Fence,
+                        io_rows := #io_job.Rows,
+                        io_n := #io_job.Count);
+   IF #iErr = 0 THEN
+      #iErr := "FC_AddRow"(i_rX := #i_scan.X0,
+                           i_rY := #i_scan.Y0,
+                           i_rZ := #i_scan.Z0,
+                           i_rRotZ := #i_scan.RotZ,
+                           i_rRotY := #i_scan.RotY,
+                           i_iBlock := 1,
+                           i_rSpeed := #i_scan.Vmove,
+                           i_xScanOn := FALSE,
+                           i_xMeasure := #xPointMode,
+                           i_fence := #io_job.Fence,
+                           io_rows := #io_job.Rows,
+                           io_n := #io_job.Count);
+   END_IF;
+
+   FOR #iLane := 0 TO #iLanes - 1 DO
+      IF #iErr <> 0 THEN
+         EXIT;
+      END_IF;
+
+      #rY := #i_scan.Y0 + INT_TO_REAL(#iLane) * #i_scan.Py;
+
+      // even lanes run +x, odd lanes run back -x, so the gantry never crosses the rectangle
+      IF (#iLane MOD 2) = 0 THEN
+         #rXs := #i_scan.X0;
+         #rXe := #i_scan.X0 + #i_scan.Lx;
+         #rDir := 1.0;
+      ELSE
+         #rXs := #i_scan.X0 + #i_scan.Lx;
+         #rXe := #i_scan.X0;
+         #rDir := -1.0;
+      END_IF;
+
+      // sidestep to the start of this lane, lane 0 is already there after the approach
+      IF #iLane > 0 THEN
+         #iErr := "FC_AddRow"(i_rX := #rXs,
+                              i_rY := #rY,
+                              i_rZ := #i_scan.Z0,
+                              i_rRotZ := #i_scan.RotZ,
+                              i_rRotY := #i_scan.RotY,
+                              i_iBlock := 1,
+                              i_rSpeed := #i_scan.Vmove,
+                              i_xScanOn := FALSE,
+                              i_xMeasure := #xPointMode,
+                              i_fence := #io_job.Fence,
+                              io_rows := #io_job.Rows,
+                              io_n := #io_job.Count);
+      END_IF;
+
+      IF #iErr = 0 THEN
+         IF NOT #xPointMode THEN
+            // one slow line over the whole lane, the scanner records while moving
+            #iErr := "FC_AddRow"(i_rX := #rXe,
+                                 i_rY := #rY,
+                                 i_rZ := #i_scan.Z0,
+                                 i_rRotZ := #i_scan.RotZ,
+                                 i_rRotY := #i_scan.RotY,
+                                 i_iBlock := 2,
+                                 i_rSpeed := #i_scan.Vscan,
+                                 i_xScanOn := TRUE,
+                                 i_xMeasure := FALSE,
+                                 i_fence := #io_job.Fence,
+                                 io_rows := #io_job.Rows,
+                                 io_n := #io_job.Count);
+         ELSE
+            // a stop and one measurement every px along the lane
+            FOR #iK := 1 TO #iPts - 1 DO
+               #iErr := "FC_AddRow"(i_rX := #rXs + #rDir * INT_TO_REAL(#iK) * #i_scan.Px,
+                                    i_rY := #rY,
+                                    i_rZ := #i_scan.Z0,
+                                    i_rRotZ := #i_scan.RotZ,
+                                    i_rRotY := #i_scan.RotY,
+                                    i_iBlock := 2,
+                                    i_rSpeed := #i_scan.Vscan,
+                                    i_xScanOn := FALSE,
+                                    i_xMeasure := TRUE,
+                                    i_fence := #io_job.Fence,
+                                    io_rows := #io_job.Rows,
+                                    io_n := #io_job.Count);
+               IF #iErr <> 0 THEN
+                  EXIT;
+               END_IF;
+            END_FOR;
+         END_IF;
+      END_IF;
+   END_FOR;
+
+   // retract straight up from the last point, so the list always ends at safe height
+   IF #iErr = 0 THEN
+      #iErr := "FC_AddRow"(i_rX := #io_job.Rows[#io_job.Count].Pose.X,
+                           i_rY := #io_job.Rows[#io_job.Count].Pose.Y,
+                           i_rZ := #i_scan.Zsafe,
+                           i_rRotZ := #i_scan.RotZ,
+                           i_rRotY := #i_scan.RotY,
+                           i_iBlock := 1,
+                           i_rSpeed := #i_scan.Vmove,
+                           i_xScanOn := FALSE,
+                           i_xMeasure := FALSE,
+                           i_fence := #io_job.Fence,
+                           io_rows := #io_job.Rows,
+                           io_n := #io_job.Count);
+   END_IF;
+
+   IF #iErr <> 0 THEN
+      #io_job.Count := 0;
+   END_IF;
+   #FC_GenRect := #iErr;
+END_FUNCTION

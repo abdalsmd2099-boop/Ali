@@ -1,0 +1,32 @@
+// program 20 - the motion library of the gantry
+//
+// the plc fills pose 51, real 51, real 52 and exactly one of bool 51..54,
+// then starts this program once. one pass = one motion.
+// the plc waits for program_finished and checks real 71 and real 73.
+//
+// keyword spelling follows the srl manual 33956901, this file keeps the
+// structure, not the exact syntax of every command.
+
+REAL[71] := 0                        // nothing ran yet in this pass
+
+IF BOOL[51] THEN                     // straight, fast, between lanes and for approach
+    LIN POSE[51]
+    REAL[71] := 1
+END_IF
+
+IF BOOL[52] THEN                     // straight, slow, the scanner records
+    LIN POSE[51]
+    REAL[71] := 2
+END_IF
+
+IF BOOL[53] THEN                     // arc counter clockwise, radius in real 51
+    CIRC POSE[51] REAL[51] CCW
+    REAL[71] := 3
+END_IF
+
+IF BOOL[54] THEN                     // arc clockwise
+    CIRC POSE[51] REAL[51] CW
+    REAL[71] := 4
+END_IF
+
+REAL[73] := REAL[52]                 // echo the run number, this proves the pass that ran

@@ -1,0 +1,10 @@
+TYPE "UDT_SrlLane"
+VERSION : 0.1
+   STRUCT
+      Pose : Array[1..5] of Int;   // pose 51, whole mm and deg, decimal places 0 on the robot
+      Par : Array[1..4] of Int;    // real 51..54: radius, run number, spare, spare
+      Gate : Array[1..8] of Bool;  // bool 51..58
+      Commit : Bool;               // written last by fb_srlmove, cleared by ob30 after the copy
+   END_STRUCT;
+
+END_TYPE
