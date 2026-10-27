@@ -205,6 +205,36 @@ Inside the call, every cycle: the press bits are read and cleared, CHECK or STAR
 
 In the arbiter: in Auto, copy the three requests to the robot pins. In Hand and Standby, Start stays FALSE whatever the job asks. Start is a level, held by `FB_SrlMove` until `program_finished` falls.
 
+### OB1 as a whole
+
+Inputs first, decisions in the middle, the single writers last, alarms at the end. Every FB once, every cycle, no contact in front of any box.
+
+| # | Network | Block | Reads | Writes |
+| --- | --- | --- | --- | --- |
+| 1 | Device module | MOVIRUN device module FB, slot 17 | I/O | comm status |
+| 2 | Modes | your `FC_Mode` / `FB_Mode` | HMI mode buttons | `intMode`, `xHand`, `xAuto` |
+| 3 | Control ON, safety release | existing | safety, local or CCR | `xControlOn`, `xSafetyOk` |
+| 4 | Machine ready | `FB_MachineReady` | network 3, `DB_Robot.Status`, MACHINE START | `Ready`, `MissingNo`, Enable / Reset / Automatic requests |
+| 5 | Referencing | your `FC_DriveHome` | Hand, HOME | home request |
+| 6 | Jog | your `FB_OperBox` | Hand, axis, JOG −, JOG + | jog requests |
+| 7 | Scan | `FC_ScanControl` | `xAuto`, `Ready`, `DB_Robot.Status`, scanner done | `Auto.Start`, `Auto.ProgNo`, `Auto.Stop`, scanner outputs |
+| 8 | Arbiter | your `FB_SEW_CmdArbiter` | owner from 2, requests from 4 to 7 | the robot command DB OB30 sends, only writer |
+| 9 | Alarms | `FB_Alarms` | `DB_Job.Status`, `.Error`, `.RowIdx`, `MissingNo` | alarm bits |
+| 10 | Stop record | `FB_StopRecord` | existing | existing |
+| 11 | Machine logic | plain LAD | FC_ScanControl outputs, I/O | lamps, horn, scanner I/O |
+
+Out of OB1: `FC_SrlGates`, replaced by network 7 and OB30's `FC_SrlWindow`. The seven-segment path, `FC_RC_Mngmt`, `FB_RC_Mechanism`, `FB_RobotOrder`, comes out too, or sits behind a job-type selector the arbiter honours. Left in as it is, it and network 7 both ask for Start.
+
+The arbiter by owner:
+
+```
+owner 0 Standby : every robot command bit FALSE, Stop TRUE
+owner 1 Hand    : Enable / Reset / Automatic from 4, jog and home from 5 and 6, Start FALSE
+owner 2 Auto    : Enable / Reset / Automatic from 4, Start / ProgNo / Stop from 7, jog FALSE
+```
+
+Exactly three DBs cross between OB1 and OB30: `DB_Robot.Status` down, the robot command DB up, `DB_SrlLane` up with its commit bit coming back.
+
 **Done when:** the project compiles. In Standby, a Test Move ends at once with error 6 and nothing moved: `i_xAuto` is FALSE, so the job aborts in its first cycle before any window is written.
 
 ---
