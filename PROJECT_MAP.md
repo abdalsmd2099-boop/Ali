@@ -217,31 +217,54 @@ Fields: `xAuto`, `xMachineReady`, `xProgFinished`, `xRobotFault`, `xCommOk` : Bo
 
 ---
 
-## 3. OB30 — five networks
+## 3. OB30 — the 10 ms cyclic interrupt, five networks, nothing else
 
-| # | Network | What it does | Pins |
-| --- | --- | --- | --- |
-| 1 | handshake toggle | flips `"DB_App".HS` | yours, unchanged |
-| 2 | `"FC_SrlWindow"` | ships `DB_SrlLane` to module 2 when `Commit` | table 3.1 |
-| 3 | module 1 FB | sends `DB_App.Cmd`, reads status | table 3.2 |
-| 4 | module 2 FB | sends the window, reads `SrlRealRaw` | unchanged |
-| 5 | `FC_RobotStatusMap` | fills `DB_App.Status` | table 3.3 |
+Settings: cycle 10 ms. Slots 18 and 19, the two 64-word modules, in the process image partition of OB30, or direct I/O inside the SEW FBs. Order in one pass: 1 handshake, 2 window, 3 module 1, 4 module 2, 5 status map. Network 2 before 3 and 4, so the same pass transmits the window. Network 5 after 3 and 4, so `Status` is from this pass.
 
-### 3.1 `FC_SrlWindow`, 18 in-outs
+| # | Network | Block | Mark | Pins |
+| --- | --- | --- | --- | --- |
+| 1 | handshake toggle | LAD | YOURS | 3.1 |
+| 2 | window | `FC_SrlWindow` | GEN | 3.2, 18 pins |
+| 3 | module 1 | SEW FB, `DB_MOVIKIT_Robotics-5AX` | YOURS | 3.3 |
+| 4 | module 2 | SEW FB v0.7, `DB_MOVIKIT_ROBOTICS_Module2` | YOURS | 3.4 |
+| 5 | status map | `FC_RobotStatusMap` | YOURS, writes `DB_App.Status` | 3.5 |
+
+### 3.1 Network 1, handshake toggle
+
+```
+"DB_App".HS := NOT "DB_App".HS;                        // every pass
+<your HS_Count tag> := <your HS_Count tag> + 1;        // optional diagnostic counter
+```
+
+The only writer of `HS`. The level goes to the robot on the handshake pin of both module FBs. Only block 1 echoes it, PI 1.15. Frozen more than 10 s, the robot latches 0x00008112.
+
+### 3.2 Network 2, `FC_SrlWindow`, exact, 18 in-outs
 
 | Pin | Type | Tag |
 | --- | --- | --- |
-| `io_iPose1` .. `io_iPose5` | Int | `"DB_MOVIKIT_ROBOTICS_Module2"` pose value pins 1..5, words 114..118 |
-| `io_iPar1` .. `io_iPar4` | Int | parameter value pins 1..4, words 119..122 |
-| `io_xBool1` .. `io_xBool8` | Bool | `"DB_MOVIKIT_ROBOTICS_Module2".WrBool1` .. `.WrBool8` |
+| `io_iPose1` | Int | `"DB_MOVIKIT_ROBOTICS_Module2"` pose value pin 1, X, word 114 |
+| `io_iPose2` | Int | pose value pin 2, Y, word 115 |
+| `io_iPose3` | Int | pose value pin 3, Z, word 116 |
+| `io_iPose4` | Int | pose value pin 4, RotZ, word 117 |
+| `io_iPose5` | Int | pose value pin 5, RotY, word 118 |
+| `io_iPar1` | Int | parameter value pin 1, REAL[51] radius, word 119 |
+| `io_iPar2` | Int | parameter value pin 2, REAL[52] run number, word 120 |
+| `io_iPar3` | Int | parameter value pin 3, REAL[53], word 121 |
+| `io_iPar4` | Int | parameter value pin 4, REAL[54], word 122 |
+| `io_xBool1` .. `io_xBool4` | Bool | `"DB_MOVIKIT_ROBOTICS_Module2".WrBool1` .. `.WrBool4`, BOOL[51..54] |
+| `io_xBool5` .. `io_xBool8` | Bool | `.WrBool5` .. `.WrBool8`, free |
 | `io_xPoseEnable` | Bool | `"DB_MOVIKIT_ROBOTICS_Module2".PoseEnable` |
 
-The nine value pin names are on the v0.7 FB interface next to `PoseFirstWord` and `ParamFirstWord`. If they are `Word`, change the nine types in the source to `Word` and wrap with `INT_TO_WORD`.
+The nine value pin names are on the v0.7 FB interface next to `PoseFirstWord` and `ParamFirstWord`. If they are `Word`, change the nine types in the source to `Word` and wrap with `INT_TO_WORD`. It reads `DB_SrlLane` inside and clears `Commit` after the copy.
 
-### 3.2 Module 1 FB inputs, by role
+### 3.3 Network 3, module 1 FB, by role
 
-| Role | Tag |
+Inputs:
+
+| Pin role | Tag or value |
 | --- | --- |
+| hardware identifier | 278, slot 18, robot words 1..64 |
+| handshake | `"DB_App".HS` |
 | enable | `"DB_App".Cmd.Enable` |
 | reset | `"DB_App".Cmd.Reset` |
 | automatic mode | `"DB_App".Cmd.Automatic` |
@@ -249,18 +272,54 @@ The nine value pin names are on the v0.7 FB interface next to `PoseFirstWord` an
 | stop | `"DB_App".Cmd.Stop` |
 | program number | `"DB_App".Cmd.ProgNo` |
 | override | `"DB_App".Cmd.Override` |
-| jog axis, jog −, jog +, home | `"DB_App".Cmd.Axis`, `.JogMinus`, `.JogPlus`, `.Home` |
+| jog axis | `"DB_App".Cmd.Axis` |
+| jog minus, jog plus | `"DB_App".Cmd.JogMinus`, `.JogPlus` |
+| home | `"DB_App".Cmd.Home` |
+| the seven path segments, PO 5..53 | not connected, the segment path is out |
 
-### 3.3 `FC_RobotStatusMap`, what it writes
+Outputs stay in the instance DB, read by network 5: handshake echo PI 1.15, safe stop PI 1.1, robot moving PI 1.4 (not used), program finished PI 2.5, motion done PI 5.2 (never used), the status bits comm ok, enabled, automatic, referenced, fault, program running, the status words error number, program number, override actual, and the five actual pose words.
 
-| `DB_App.Status` field | From |
+### 3.4 Network 4, module 2 FB v0.7, by role
+
+Inputs:
+
+| Pin role | Tag or value |
 | --- | --- |
-| `ProgFinished` | PI 2.5 |
-| `SafeStop` | PI 1.1 |
-| `ProgRunning`, `CommOk`, `Enabled`, `Automatic`, `Referenced`, `Fault` | module 1 FB status outputs |
-| `ErrorNo`, `ProgNo`, `Override` | module 1 FB status words |
-| `ActX` .. `ActRotY` | the five actual pose words in PI |
-| `SrlRealRaw[1..16]` | module 2, words 65..80 |
+| hardware identifier | 272, slot 19, robot words 65..128 |
+| handshake | `"DB_App".HS` |
+| `PoseFirstWord` | 50, word 114 |
+| `ParamFirstWord` | 55, word 119 |
+| `BoolWriteWord` | 59, word 123 |
+| `PoseEnable`, pose value 1..5, parameter value 1..4, `WrBool1..8` | **leave unconnected at the call.** Network 2 writes them into the instance DB. A tag on one of these pins would copy over that write every pass |
+| segments 8..14, PO 65..113 | not connected |
+
+Outputs: `SrlRealRaw[1..16]`, REAL[71..86], words 65..80, read by network 5. Boolean actual values, word 81, index unconfirmed, not used.
+
+### 3.5 Network 5, `FC_RobotStatusMap`, the only writer of `DB_App.Status`
+
+```
+"DB_App".Status.ProgFinished := "DB_MOVIKIT_Robotics-5AX".<program finished>;     // pi 2.5
+"DB_App".Status.SafeStop     := "DB_MOVIKIT_Robotics-5AX".<safe stop>;            // pi 1.1
+"DB_App".Status.ProgRunning  := "DB_MOVIKIT_Robotics-5AX".<program running>;
+"DB_App".Status.CommOk       := "DB_MOVIKIT_Robotics-5AX".<comm ok>;
+"DB_App".Status.Enabled      := "DB_MOVIKIT_Robotics-5AX".<enabled>;
+"DB_App".Status.Automatic    := "DB_MOVIKIT_Robotics-5AX".<automatic>;
+"DB_App".Status.Referenced   := "DB_MOVIKIT_Robotics-5AX".<referenced>;
+"DB_App".Status.Fault        := "DB_MOVIKIT_Robotics-5AX".<fault>;
+"DB_App".Status.ErrorNo      := "DB_MOVIKIT_Robotics-5AX".<error number>;
+"DB_App".Status.ProgNo       := "DB_MOVIKIT_Robotics-5AX".<program number actual>;
+"DB_App".Status.Override     := "DB_MOVIKIT_Robotics-5AX".<override actual>;
+"DB_App".Status.ActX         := "DB_MOVIKIT_Robotics-5AX".<actual pose word 1>;
+"DB_App".Status.ActY         := "DB_MOVIKIT_Robotics-5AX".<actual pose word 2>;
+"DB_App".Status.ActZ         := "DB_MOVIKIT_Robotics-5AX".<actual pose word 3>;
+"DB_App".Status.ActRotZ      := "DB_MOVIKIT_Robotics-5AX".<actual pose word 4>;
+"DB_App".Status.ActRotY      := "DB_MOVIKIT_Robotics-5AX".<actual pose word 5>;
+"DB_App".Status.SrlRealRaw   := "DB_MOVIKIT_ROBOTICS_Module2".<SrlRealRaw 1..16>;
+```
+
+The left side is exact. The right side in angle brackets is the output name of the SEW FB, read it off the instance DB.
+
+Not in OB30: no decision, no HMI, no job, no timer. Nothing writes `DB_App.Cmd` here, nothing writes the module 2 pose pins here except network 2. A sixth network is a mistake.
 
 ---
 
