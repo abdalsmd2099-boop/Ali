@@ -62,8 +62,8 @@ Create four watch tables. Monitor every tag, modify only the ones marked M.
 
 | Tag | M | Purpose |
 | --- | --- | --- |
-| your status tags on the `FC_ScanControl` pins: program_finished, fault, comm ok, actual pose words, `SrlRealRaw[1]`, `SrlRealRaw[3]` | | robot feedback |
-| your mode tag and `FB_MachineReady` Ready, MissingNo | | preconditions |
+| `DB_App.Status.ProgFinished`, `.Fault`, `.CommOk`, `.ActX .. ActRotY`, `.SrlRealRaw[1]`, `.SrlRealRaw[3]` | | robot feedback |
+| `DB_Mode.sttBit.sttAuto.xAuto`, `DB_MachineReady` Ready and MissingNo | | preconditions |
 
 ### 1.2 The commissioning rectangle
 
@@ -234,7 +234,7 @@ How you play the robot: a pass of program 20 is three modifies in this order. Fi
 
 **D1 One test move, with retract**
 - Do: `TestPose := (1000, 500, 550, 0, 0)`, `TestBlock := 1`. Modify `DB_HMI.TestMove := TRUE`.
-- Check, within a cycle: `TestMove` cleared, `CheckResult` 0, `Count` 1, `Rows[1]` = the test pose, `Status` 1, `DB_ScanJob.iState` 30, `move.iState` 30. `DB_SrlLane.Pose` = 1000 500 **600** 0 0, the retract to Zsafe from the actual position, not the test pose. `Par[2]` 1, `Gate[1]` TRUE, others FALSE, `Commit` FALSE. The module 2 pins show the same. `o_xStart` TRUE. `DB_RobotCmd` Auto Start TRUE. **The robot Start pin FALSE**, the arbiter blocks it in Standby.
+- Check, within a cycle: `TestMove` cleared, `CheckResult` 0, `Count` 1, `Rows[1]` = the test pose, `Status` 1, `DB_ScanJob.iState` 30, `move.iState` 30. `DB_SrlLane.Pose` = 1000 500 **600** 0 0, the retract to Zsafe from the actual position, not the test pose. `Par[2]` 1, `Gate[1]` TRUE, others FALSE, `Commit` FALSE. The module 2 pins show the same. `o_xStart` TRUE. `DB_App.Req.Auto.Start` TRUE. **`DB_App.Cmd.Start` FALSE**, the arbiter blocks it in Standby.
 - If not: `move.iState` stuck at 20 means Commit never cleared, stage C. Robot Start pin TRUE means the arbiter passes Start outside Auto. Stop and fix that before anything else.
 
 **D2 Play the retract**

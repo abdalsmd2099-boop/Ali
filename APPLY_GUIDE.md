@@ -75,32 +75,57 @@ Also: the STO reading active with the chain closed (open point 8 of the status p
 
 The source never names anything from your project. Everything project specific is a pin on one of the two FCs.
 
-### `FC_SrlWindow`, called in OB30
+All project tags are in `DB_App`, shaped as `DB_MAP.md` section 2 says, or in the instance DBs named below. One name set, used here, in the commissioning procedure and on the HMI canvas.
+
+### `FC_SrlWindow`, OB30 network 2, 18 in-outs
 
 | Pin | Type | Connect to |
 | --- | --- | --- |
-| `io_iPose1 .. io_iPose5` | Int, in-out | the five pose pins of the module 2 FB, words 114 to 118 |
-| `io_iPar1 .. io_iPar4` | Int, in-out | the four parameter pins, words 119 to 122 |
-| `io_xBool1 .. io_xBool8` | Bool, in-out | `WrBool1..8`, word 123 |
-| `io_xPoseEnable` | Bool, in-out | `PoseEnable` |
+| `io_iPose1` | Int | `"DB_MOVIKIT_ROBOTICS_Module2"`, pose value pin 1, X, word 114 |
+| `io_iPose2` | Int | pose value pin 2, Y, word 115 |
+| `io_iPose3` | Int | pose value pin 3, Z, word 116 |
+| `io_iPose4` | Int | pose value pin 4, RotZ, word 117 |
+| `io_iPose5` | Int | pose value pin 5, RotY, word 118 |
+| `io_iPar1` | Int | parameter value pin 1, REAL[51] radius, word 119 |
+| `io_iPar2` | Int | parameter value pin 2, REAL[52] run number, word 120 |
+| `io_iPar3` | Int | parameter value pin 3, REAL[53], word 121 |
+| `io_iPar4` | Int | parameter value pin 4, REAL[54], word 122 |
+| `io_xBool1` | Bool | `"DB_MOVIKIT_ROBOTICS_Module2".WrBool1`, BOOL[51], word 123 bit 0 |
+| `io_xBool2` | Bool | `.WrBool2`, BOOL[52] |
+| `io_xBool3` | Bool | `.WrBool3`, BOOL[53] |
+| `io_xBool4` | Bool | `.WrBool4`, BOOL[54] |
+| `io_xBool5` .. `io_xBool8` | Bool | `.WrBool5` .. `.WrBool8`, BOOL[55..58], free |
+| `io_xPoseEnable` | Bool | `"DB_MOVIKIT_ROBOTICS_Module2".PoseEnable` |
 
-If the module 2 pins are `Word`, not `Int`, change the pin types in the source to `Word` and wrap the assignments in `INT_TO_WORD`. In-out pins need the same type on both sides.
+`WrBool1..8` and `PoseEnable` are the pin names from your status page. The names of the five pose value pins and the four parameter value pins I have not seen: they are the inputs of the v0.7 FB next to `PoseFirstWord := 50` and `ParamFirstWord := 55`. Read them off the FB interface and connect in word order. If they are `Word`, not `Int`, change the nine pin types in the source to `Word` and wrap the nine assignments in `INT_TO_WORD`.
 
-### `FC_ScanControl`, called in OB1
+### `FC_ScanControl`, OB1 network 7, 13 inputs and 8 outputs
 
 | Pin | Type | Connect to |
 | --- | --- | --- |
-| `i_xAuto` | Bool | the Auto bit of your mode DB. A drop aborts the job |
-| `i_xMachineReady` | Bool | READY TO START from `FB_MachineReady` |
-| `i_xProgFinished` | Bool | PI 2.5 `program_finished`, from `FC_RobotStatusMap` |
-| `i_xRobotFault` | Bool | the robot fault bit |
-| `i_xCommOk` | Bool | communication ok from the module FB |
-| `i_iReal71`, `i_iReal73` | Int | `SrlRealRaw[1]` and `SrlRealRaw[3]` |
-| `i_iActX .. i_iActRotY` | Int | the five actual pose words from PI, same frame as POSE[51] |
-| `i_xMeasDone` | Bool | scanner: measurement finished. Tie to TRUE until a scanner exists |
-| `o_xStart`, `o_iProgNo`, `o_xStop` | Bool, Int, Bool | the automatic requests your arbiter reads |
-| `o_xScanOn`, `o_xMeasTrigger`, `o_iRowTag` | Bool, Bool, Int | the scanner, or nothing yet |
-| `o_iJobStatus`, `o_iJobError` | Int | spare copies for alarms, the HMI reads `DB_Job` directly |
+| `i_xAuto` | Bool | `"DB_Mode".sttBit.sttAuto.xAuto`, the Auto bit of your mode DB as V128 names it. A drop aborts the job |
+| `i_xMachineReady` | Bool | the READY TO START output of `"DB_MachineReady"`, your `FB_MachineReady` instance |
+| `i_xProgFinished` | Bool | `"DB_App".Status.ProgFinished` |
+| `i_xRobotFault` | Bool | `"DB_App".Status.Fault` |
+| `i_xCommOk` | Bool | `"DB_App".Status.CommOk` |
+| `i_iReal71` | Int | `"DB_App".Status.SrlRealRaw[1]` |
+| `i_iReal73` | Int | `"DB_App".Status.SrlRealRaw[3]` |
+| `i_iActX` | Int | `"DB_App".Status.ActX` |
+| `i_iActY` | Int | `"DB_App".Status.ActY` |
+| `i_iActZ` | Int | `"DB_App".Status.ActZ` |
+| `i_iActRotZ` | Int | `"DB_App".Status.ActRotZ` |
+| `i_iActRotY` | Int | `"DB_App".Status.ActRotY` |
+| `i_xMeasDone` | Bool | the scanner's done input, or the constant TRUE until a scanner exists |
+| `o_xStart` | Bool | `"DB_App".Req.Auto.Start` |
+| `o_iProgNo` | Int | `"DB_App".Req.Auto.ProgNo` |
+| `o_xStop` | Bool | `"DB_App".Req.Auto.Stop` |
+| `o_xScanOn` | Bool | the scanner's record output, or open |
+| `o_xMeasTrigger` | Bool | the scanner's trigger output, or open |
+| `o_iRowTag` | Int | the scanner's row tag, or open |
+| `o_iJobStatus` | Int | open, or an input of `FB_Alarms` |
+| `o_iJobError` | Int | open, or an input of `FB_Alarms` |
+
+The arbiter, OB1 network 8, copies `"DB_App".Req.Auto.Start`, `.ProgNo`, `.Stop` to `"DB_App".Cmd.Start`, `.ProgNo`, `.Stop` in Auto, and holds `Cmd.Start` FALSE in Hand and Standby. OB30 network 3 sends `"DB_App".Cmd` through the module 1 FB.
 
 ---
 
@@ -176,18 +201,20 @@ Remove any other writer of those pins (the old `FC_SrlGates` path). OB30 order a
 
 ## 8. Step 4 — the status map
 
-`FC_RobotStatusMap` must deliver into `DB_Robot.Status`:
+`FC_RobotStatusMap`, OB30 network 5, is the only writer of `"DB_App".Status`. It must deliver:
 
-| Field | Source |
-| --- | --- |
-| `ProgFinished` | PI 2.5 `program_finished` |
-| `Fault` | the robot fault bit |
-| `CommOk` | module FB communication ok |
-| `ActPose.X .. RotY` | actual pose words, as Real, whole mm |
-| `SrlRealRaw[1..16]` | words 65 to 80 |
-| `Referenced`, `Automatic`, `Enabled`, `SafeStop` | for the HMI lamps and `FB_MachineReady` |
+| `DB_App.Status` field | Type | Source |
+| --- | --- | --- |
+| `ProgFinished` | Bool | PI 2.5 `program_finished` |
+| `ProgRunning` | Bool | the program running bit of the module 1 FB |
+| `SafeStop` | Bool | PI 1.1 `safe_stop` |
+| `CommOk` | Bool | communication ok output of the module 1 FB |
+| `Enabled`, `Automatic`, `Referenced`, `Fault` | Bool | the matching status bits of the module 1 FB |
+| `ErrorNo`, `ProgNo`, `Override` | Int | the matching status words of the module 1 FB |
+| `ActX`, `ActY`, `ActZ`, `ActRotZ`, `ActRotY` | Int | the five actual pose words in PI, whole mm and deg, same frame as POSE[51] |
+| `SrlRealRaw[1..16]` | Int | module 2 words 65 to 80, REAL[71..86] |
 
-Do not map `motion_done` (PI 5.2) to anything the job reads.
+Not mapped to anything the job reads: `motion_done` PI 5.2, and `robot_moving` PI 1.4 until SEW says what it means.
 
 ---
 
@@ -199,7 +226,7 @@ One new network after `FB_MachineReady` and before the arbiter, with one LAD box
 "FC_ScanControl"
 ```
 
-Connect the pins as in section 4. Inputs come from your mode DB, `FB_MachineReady`, `DB_Robot.Status` and the scanner. Outputs `o_xStart`, `o_iProgNo` and `o_xStop` go to the automatic requests your arbiter reads. `o_xScanOn`, `o_xMeasTrigger` and `o_iRowTag` go to the scanner, or stay open until it exists. Until a scanner exists, tie `i_xMeasDone` to TRUE.
+Connect the pins as in section 4. Inputs come from `DB_Mode`, `DB_MachineReady`, `DB_App.Status` and the scanner. Outputs `o_xStart`, `o_iProgNo` and `o_xStop` go to `DB_App.Req.Auto`, which the arbiter reads. `o_xScanOn`, `o_xMeasTrigger` and `o_iRowTag` go to the scanner, or stay open until it exists. Until a scanner exists, tie `i_xMeasDone` to TRUE.
 
 Inside the call, every cycle: the press bits are read and cleared, CHECK or START builds the list with `FC_GenRect`, TEST MOVE builds a one-row list, `DB_ScanJob` runs, and the outputs are copied. The HMI never needs anything from the pins: it reads and writes `DB_HMI`, `DB_Scan` and `DB_Job` directly.
 
@@ -214,11 +241,11 @@ Inputs first, decisions in the middle, the single writers last, alarms at the en
 | 1 | Device module | MOVIRUN device module FB, slot 17 | I/O | comm status |
 | 2 | Modes | your `FC_Mode` / `FB_Mode` | HMI mode buttons | `intMode`, `xHand`, `xAuto` |
 | 3 | Control ON, safety release | existing | safety, local or CCR | `xControlOn`, `xSafetyOk` |
-| 4 | Machine ready | `FB_MachineReady` | network 3, `DB_Robot.Status`, MACHINE START | `Ready`, `MissingNo`, Enable / Reset / Automatic requests |
+| 4 | Machine ready | `FB_MachineReady` | network 3, `DB_App.Status`, MACHINE START | `Ready`, `MissingNo`, `DB_App.Req.Machine` Enable / Reset / Automatic |
 | 5 | Referencing | your `FC_DriveHome` | Hand, HOME | home request |
 | 6 | Jog | your `FB_OperBox` | Hand, axis, JOG −, JOG + | jog requests |
-| 7 | Scan | `FC_ScanControl` | `xAuto`, `Ready`, `DB_Robot.Status`, scanner done | `Auto.Start`, `Auto.ProgNo`, `Auto.Stop`, scanner outputs |
-| 8 | Arbiter | your `FB_SEW_CmdArbiter` | owner from 2, requests from 4 to 7 | the robot command DB OB30 sends, only writer |
+| 7 | Scan | `FC_ScanControl` | `xAuto`, `Ready`, `DB_App.Status`, scanner done | `DB_App.Req.Auto` Start, ProgNo, Stop, scanner outputs |
+| 8 | Arbiter | your `FB_SEW_CmdArbiter` | owner from 2, `DB_App.Req.*` from 4 to 7 | `DB_App.Cmd`, only writer |
 | 9 | Alarms | `FB_Alarms` | `DB_Job.Status`, `.Error`, `.RowIdx`, `MissingNo` | alarm bits |
 | 10 | Stop record | `FB_StopRecord` | existing | existing |
 | 11 | Machine logic | plain LAD | FC_ScanControl outputs, I/O | lamps, horn, scanner I/O |
@@ -233,7 +260,7 @@ owner 1 Hand    : Enable / Reset / Automatic from 4, jog and home from 5 and 6, 
 owner 2 Auto    : Enable / Reset / Automatic from 4, Start / ProgNo / Stop from 7, jog FALSE
 ```
 
-Exactly three DBs cross between OB1 and OB30: `DB_Robot.Status` down, the robot command DB up, `DB_SrlLane` up with its commit bit coming back.
+Exactly three things cross between OB1 and OB30: `DB_App.Status` down, `DB_App.Cmd` up, `DB_SrlLane` up with its commit bit coming back.
 
 **Done when:** the project compiles. In Standby, a Test Move ends at once with error 6 and nothing moved: `i_xAuto` is FALSE, so the job aborts in its first cycle before any window is written.
 
@@ -305,13 +332,13 @@ A commissioning screen holds: `Vscan`, `Vmove`, the fence, the override, test mo
 | DB_Job.Error | Int | read | error number as text | operator |
 | DB_Job.Rows[n] | UDT_Row | read | optional list view after CHECK | commissioning |
 | DB_Job.Fence.Xmin .. Zmax | Real | write | envelope inside the robot soft limits | admin |
-| DB_Machine.Ready, MissingNo | Bool, Int | read | ready, what is missing | operator |
+| DB_MachineReady, the Ready and MissingNo outputs | Bool, Int | read | ready, what is missing | operator |
 | DB_Mode.intMode | Int | read | Standby, Hand, Auto | operator |
-| DB_Robot.Status.ActPose | UDT_Pose5 | read | actual position | operator |
-| DB_Robot.Status.CommOk, Automatic, Enabled, Referenced, SafeStop | Bool | read | robot lamps | operator |
-| DB_Robot.Status.Fault, ErrorNo | Bool, Int | read | robot fault, text from the manual | operator |
-| DB_Robot.Status.ProgFinished, ProgNo, Override | mixed | read | diagnostics | commissioning |
-| DB_Robot.Status.SrlRealRaw[1], [3] | Int | read | block that ran, run number echo | commissioning |
+| DB_App.Status.ActX, ActY, ActZ, ActRotZ, ActRotY | Int | read | actual position | operator |
+| DB_App.Status.CommOk, Automatic, Enabled, Referenced, SafeStop | Bool | read | robot lamps | operator |
+| DB_App.Status.Fault, ErrorNo | Bool, Int | read | robot fault, text from the manual | operator |
+| DB_App.Status.ProgFinished, ProgNo, Override | mixed | read | diagnostics | commissioning |
+| DB_App.Status.SrlRealRaw[1], [3] | Int | read | block that ran, run number echo | commissioning |
 | DB_SrlLane.Pose[1..5] | Int | read | the target on the bus | operator |
 | scanner tags, from the `FC_ScanControl` pins | Bool, Int | read | scanner lamps and the row the data is tagged with | operator |
 
@@ -371,10 +398,10 @@ Per row the PLC adds about three OB30 passes and three OB1 cycles, on top of the
 | DB_Job RowIdx, Status, Error | FB_ScanJob, and the reset inside FC_ScanControl | OB1 |
 | DB_SrlLane | FB_SrlMove inside FB_ScanJob | OB1 |
 | Module 2 setpoint pins | FC_SrlWindow | OB30 network 2 |
-| Automatic requests to the arbiter | the FC_ScanControl outputs | OB1 |
-| Robot pins | arbiter | OB1 |
-| Module 1 control words | module 1 FB | OB30 |
-| DB_Robot.Status | FC_RobotStatusMap | OB30 |
+| DB_App.Req.Auto | the FC_ScanControl outputs | OB1 |
+| DB_App.Cmd | arbiter | OB1 |
+| Module 1 control words | module 1 FB, from DB_App.Cmd | OB30 |
+| DB_App.Status | FC_RobotStatusMap | OB30 |
 | DB_HMI press bits | HMI sets, FC_ScanControl clears | both |
 
 ### When something goes wrong
