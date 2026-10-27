@@ -56,7 +56,7 @@ Create four watch tables. Monitor every tag, modify only the ones marked M.
 | --- | --- | --- |
 | `DB_SrlLane.Pose[1..5]`, `.Par[1..4]`, `.Gate[1..8]`, `.Commit` | M | the staging window |
 | the module 2 pins the `FC_SrlWindow` in-outs are connected to | | what goes on the bus |
-| your `DB_RobotCmd` Auto Start, ProgNo, Stop and the robot pins the arbiter writes | | start request and what reaches the robot |
+| `DB_App.Req.Auto.Start`, `.ProgNo`, `.Stop` and `DB_App.Cmd.Start`, `.Stop` | | the request and what reaches the robot |
 
 **WT_Robot** — what the PLC sees from the robot
 
