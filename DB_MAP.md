@@ -12,7 +12,7 @@ One page. `DB_App` is the robot interface DB the project already has. Everything
 | `DB_SrlLane` | `UDT_SrlLane` | the staging window and `Commit` | `FB_SrlMove` inside `DB_ScanJob`; `Commit` cleared by `FC_SrlWindow` | `FC_SrlWindow`, HMI reads | no |
 | `DB_Scan` | `UDT_ScanRect` | the rectangle | HMI | `FC_ScanControl`, HMI | **yes** |
 | `DB_Job` | `UDT_Job` | list, job status, fence | `FC_GenRect`, `FB_ScanJob`, the reset in `FC_ScanControl`; `Fence` by HMI level 2 | HMI, `FB_Alarms` | **Fence only** |
-| `DB_HMI` | `UDT_HMI` | scan presses, switches, test pose, check result | HMI sets presses, `FC_ScanControl` clears them and writes `CheckResult` | `FC_ScanControl`, HMI | no |
+| `DB_HMI` | `UDT_HMI` | scan presses, switches, test pose, check result, override setpoint | HMI sets presses and override, `FC_ScanControl` clears presses and writes `CheckResult` | `FC_ScanControl`, `FC_CmdArbiter`, HMI | no |
 | `DB_ScanJob` | instance `FB_ScanJob` | job and move state machines, holds the `FB_SrlMove` instance | itself | HMI lamps, `FB_Alarms` read | no |
 | `DB_Mode` | yours | `intMode`, mode bits, mode buttons | `FB_Mode`; buttons set by HMI, cleared by `FB_Mode` | arbiter, every OB1 block, HMI | no |
 | `DB_MachineReady` | instance `FB_MachineReady` | sequence, `Ready`, `MissingNo` | itself | arbiter, `FC_ScanControl`, HMI | no |
@@ -36,7 +36,7 @@ DB_App
      Machine    Enable, Reset, Automatic : Bool   writer: FB_MachineReady
      Hand       Axis : Int; JogMinus, JogPlus, Home : Bool   writer: FB_OperBox, FC_DriveHome
      Auto       Start, Stop : Bool; ProgNo : Int  writer: FC_ScanControl
-  Cmd           STRUCT                            the pins, writer: the arbiter, reader: OB30 module 1
+  Cmd           STRUCT                            the pins, writer: FC_CmdArbiter, reader: OB30 module 1
      Enable, Reset, Automatic, Start, Stop : Bool
      ProgNo, Override, Axis : Int
      JogMinus, JogPlus, Home : Bool
@@ -45,7 +45,7 @@ DB_App
 Removed from `DB_App`:
 
 - `Srl`, the old lane. `DB_SrlLane` is the lane. Delete `Srl` together with `FC_SrlGates`; two lanes means two writers of the module 2 pins.
-- Direct writes into `Cmd` by `FB_MachineReady`. It writes `Req.Machine`; the arbiter copies to `Cmd` in Hand and Auto. The arbiter is the only writer of `Cmd`.
+- Direct writes into `Cmd` by `FB_MachineReady`. It writes `Req.Machine`; `FC_CmdArbiter` copies to `Cmd`. `FC_CmdArbiter` is the only writer of `Cmd`. Every pin of it is in `OB1_WIRING.md`.
 - A copy of `ready` or `MissingNo`. They live in the `FB_MachineReady` instance DB only.
 
 ## 3. Two conflicts when generating `BGE_Scan.scl`
@@ -56,7 +56,7 @@ Removed from `DB_App`:
 ## 4. Rules
 
 1. **One writer per tag.** This page is the law. After every change, cross-reference `DB_App.Cmd` and the module 2 pins: exactly one writer each.
-2. **Requests are not commands.** Blocks write `Req.*`. The arbiter writes `Cmd`. OB30 sends `Cmd`. No block writes `Cmd`.
+2. **Requests are not commands.** Blocks write `Req.*`. `FC_CmdArbiter` writes `Cmd`. OB30 sends `Cmd`. No other block writes `Cmd`.
 3. **OB30 owns the robot's edge.** It alone writes `HS`, the module instance DB pins and `Status`, and clears `DB_SrlLane.Commit`. OB1 never touches a module instance DB.
 4. **The HMI writes parameters and presses only:** `DB_Scan`, `DB_HMI`, `DB_Job.Fence`, the mode buttons. Never `DB_App`, never `DB_SrlLane`, never an instance DB.
 5. **Instance DBs are private.** Only their FB writes them. The HMI and alarms may read.

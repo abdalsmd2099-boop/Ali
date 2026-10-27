@@ -49,9 +49,10 @@ What `BGE_Scan.scl` generates, in this order:
 | `FB_ScanJob` | walks the rows, retract, scanner, pause, step, fault |
 | `DB_ScanJob` | the one instance of FB_ScanJob, holds the FB_SrlMove instance inside |
 | `FC_SrlWindow` | **you call this in OB30**, ships the window to the module 2 pins |
-| `FC_ScanControl` | **you call this in OB1**, HMI presses, job, outputs for the arbiter and the scanner |
+| `FC_ScanControl` | **you call this in OB1**, network 7, HMI presses, job, requests for the arbiter and the scanner |
+| `FC_CmdArbiter` | **you call this in OB1**, network 8, the only writer of `DB_App.Cmd` |
 
-The two FCs have pins. Your own tags go on the pins, in LAD, at the two calls. Nothing inside the source has to be renamed.
+The three FCs have pins. Your own tags go on the pins, in LAD, at the three calls. Nothing inside the source has to be renamed. `OB1_WIRING.md` lists every pin of every OB1 network with its tag.
 
 ---
 
@@ -125,7 +126,7 @@ All project tags are in `DB_App`, shaped as `DB_MAP.md` section 2 says, or in th
 | `o_iJobStatus` | Int | open, or an input of `FB_Alarms` |
 | `o_iJobError` | Int | open, or an input of `FB_Alarms` |
 
-The arbiter, OB1 network 8, copies `"DB_App".Req.Auto.Start`, `.ProgNo`, `.Stop` to `"DB_App".Cmd.Start`, `.ProgNo`, `.Stop` in Auto, and holds `Cmd.Start` FALSE in Hand and Standby. OB30 network 3 sends `"DB_App".Cmd` through the module 1 FB.
+`FC_CmdArbiter`, OB1 network 8, copies `"DB_App".Req.Auto.Start`, `.ProgNo`, `.Stop` to `"DB_App".Cmd.Start`, `.ProgNo`, `.Stop` in Auto, and holds `Cmd.Start` FALSE in Hand and Standby. Its full pin list is in `OB1_WIRING.md`. OB30 network 3 sends `"DB_App".Cmd` through the module 1 FB.
 
 ---
 
@@ -177,7 +178,7 @@ Then:
 - `DB_Scan` → properties → retentive.
 - `DB_Job.Fence`: put the real envelope in, read from the robot soft limits, a few millimetres inside them.
 
-**Done when:** the project compiles with 0 errors and the two FCs `FC_SrlWindow` and `FC_ScanControl` are in the block list. `FB_SrlMove` has no instance DB of its own; it lives inside `DB_ScanJob`.
+**Done when:** the project compiles with 0 errors and the three FCs `FC_SrlWindow`, `FC_ScanControl` and `FC_CmdArbiter` are in the block list. `FB_SrlMove` has no instance DB of its own; it lives inside `DB_ScanJob`.
 
 If generation stops with an error, it names the line. The two usual causes are a `Word` versus `Int` mismatch on the module 2 pins (section 4) and a block of the same name already in the project.
 
@@ -230,7 +231,7 @@ Connect the pins as in section 4. Inputs come from `DB_Mode`, `DB_MachineReady`,
 
 Inside the call, every cycle: the press bits are read and cleared, CHECK or START builds the list with `FC_GenRect`, TEST MOVE builds a one-row list, `DB_ScanJob` runs, and the outputs are copied. The HMI never needs anything from the pins: it reads and writes `DB_HMI`, `DB_Scan` and `DB_Job` directly.
 
-In the arbiter: in Auto, copy the three requests to the robot pins. In Hand and Standby, Start stays FALSE whatever the job asks. Start is a level, held by `FB_SrlMove` until `program_finished` falls.
+Network 8 is `FC_CmdArbiter`: in Auto it copies the three requests to `DB_App.Cmd`, in Hand and Standby `Cmd.Start` stays FALSE whatever the job asks. Start is a level, held by `FB_SrlMove` until `program_finished` falls. Every pin of both calls, and the pin roles of your own four blocks, are in `OB1_WIRING.md`.
 
 ### OB1 as a whole
 
@@ -245,7 +246,7 @@ Inputs first, decisions in the middle, the single writers last, alarms at the en
 | 5 | Referencing | your `FC_DriveHome` | Hand, HOME | home request |
 | 6 | Jog | your `FB_OperBox` | Hand, axis, JOG −, JOG + | jog requests |
 | 7 | Scan | `FC_ScanControl` | `xAuto`, `Ready`, `DB_App.Status`, scanner done | `DB_App.Req.Auto` Start, ProgNo, Stop, scanner outputs |
-| 8 | Arbiter | your `FB_SEW_CmdArbiter` | owner from 2, `DB_App.Req.*` from 4 to 7 | `DB_App.Cmd`, only writer |
+| 8 | Arbiter | `FC_CmdArbiter` | owner from 2, `DB_App.Req.*` from 4 to 7, `DB_HMI.Override` | `DB_App.Cmd`, only writer |
 | 9 | Alarms | `FB_Alarms` | `DB_Job.Status`, `.Error`, `.RowIdx`, `MissingNo` | alarm bits |
 | 10 | Stop record | `FB_StopRecord` | existing | existing |
 | 11 | Machine logic | plain LAD | FC_ScanControl outputs, I/O | lamps, horn, scanner I/O |
@@ -326,6 +327,7 @@ A commissioning screen holds: `Vscan`, `Vmove`, the fence, the override, test mo
 | DB_HMI.TestPose.X .. RotY | Real | write | target of the test move | commissioning |
 | DB_HMI.TestBlock | Int | write | 1 to 4 | commissioning |
 | DB_HMI.CheckResult | Int | read | 0 ok, 1 bad size, 2 too long, 3 outside the fence | operator |
+| DB_HMI.Override | Int | write | override setpoint in percent, the arbiter caps it to 1 to 60 | commissioning |
 | DB_Job.Status | Int | read | 0 idle, 1 running, 2 paused, 3 done, 4 fault | operator |
 | DB_Job.RowIdx, Count | Int | read | row n of m | operator |
 | DB_Job.Lanes, EstTimeS | Int | read | lanes, estimated time | operator |

@@ -5,3 +5,4 @@ Technical
 - `plc/BGE_Scan.scl` — one TIA external source, generates every PLC block. `robot/program20.srl` — the robot side.
 - `COMMISSIONING_PROCEDURE.md` — step by step, do and check, from nothing moves to twenty clean runs, with the record sheet.
 - `DB_MAP.md` — every DB, who writes it, who reads it, the shape of `DB_App`, and the rules that keep one writer per tag.
+- `OB1_WIRING.md` — OB1 network by network, every pin with its tag.

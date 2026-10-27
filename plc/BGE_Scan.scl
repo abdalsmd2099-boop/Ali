@@ -7,7 +7,7 @@
 //   5 dbs              db_scan db_job db_srllane db_hmi db_scanjob (instance)
 //   2 fcs for the list fc_addrow fc_genrect
 //   2 fbs for the move fb_srlmove fb_scanjob
-//   2 fcs to call      fc_srlwindow (ob30, network 2)  fc_scancontrol (ob1, after fb_machineready)
+//   3 fcs to call      fc_srlwindow (ob30, network 2)  fc_scancontrol (ob1, network 7)  fc_cmdarbiter (ob1, network 8)
 //
 // everything on the bus is whole mm and deg, decimal places 0 on the robot
 
@@ -114,6 +114,7 @@ VERSION : 0.1
       TestPose : "UDT_Pose5";
       TestBlock : Int;           // 1 lin fast, 2 lin slow, 3 circ ccw, 4 circ cw
       CheckResult : Int;         // 0 ok, 1 bad size, 2 too long, 3 outside the fence
+      Override : Int;            // override setpoint in percent, fc_cmdarbiter caps it to 1..60
    END_STRUCT;
 
 END_TYPE
@@ -180,6 +181,7 @@ NON_RETAIN
 
 BEGIN
    TestBlock := 1;
+   Override := 10;
 
 END_DATA_BLOCK
 
@@ -1006,4 +1008,90 @@ BEGIN
    #o_iRowTag := "DB_Job".RowIdx;
    #o_iJobStatus := "DB_Job".Status;
    #o_iJobError := "DB_Job".Error;
+END_FUNCTION
+
+FUNCTION "FC_CmdArbiter" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// ob1, network 8, after every block that raises a request and before the alarms
+// the only writer of the robot command pins: owner from the mode, requests in, commands out
+// standby: stop held, nothing else. hand: machine requests plus jog and home. auto: machine requests plus start, program number, stop
+   VAR_INPUT 
+      i_xHand : Bool;               // mode hand, owner 1
+      i_xAuto : Bool;               // mode auto, owner 2. neither or both = standby
+      i_xReqEnable : Bool;          // db_app.req.machine, from fb_machineready
+      i_xReqReset : Bool;
+      i_xReqAutomatic : Bool;
+      i_iReqAxis : Int;             // db_app.req.hand, from fb_operbox
+      i_xReqJogMinus : Bool;
+      i_xReqJogPlus : Bool;
+      i_xReqHome : Bool;            // db_app.req.hand, from fc_drivehome
+      i_xReqStart : Bool;           // db_app.req.auto, from fc_scancontrol
+      i_iReqProgNo : Int;
+      i_xReqStop : Bool;
+      i_iOverride : Int;            // override setpoint in percent from the screen
+   END_VAR
+
+   VAR_OUTPUT 
+      o_xEnable : Bool;             // the eleven robot command pins, db_app.cmd
+      o_xReset : Bool;
+      o_xAutomatic : Bool;
+      o_xStart : Bool;
+      o_xStop : Bool;
+      o_iProgNo : Int;
+      o_iOverride : Int;
+      o_iAxis : Int;
+      o_xJogMinus : Bool;
+      o_xJogPlus : Bool;
+      o_xHome : Bool;
+      o_iOwner : Int;               // 0 standby, 1 hand, 2 auto, for the screen
+   END_VAR
+
+
+BEGIN
+   // exactly one mode gives an owner, anything else is standby
+   IF #i_xAuto AND NOT #i_xHand THEN
+      #o_iOwner := 2;
+   ELSIF #i_xHand AND NOT #i_xAuto THEN
+      #o_iOwner := 1;
+   ELSE
+      #o_iOwner := 0;
+   END_IF;
+   
+   // the machine requests do not depend on the owner, the drives stay enabled in standby
+   #o_xEnable := #i_xReqEnable;
+   #o_xReset := #i_xReqReset;
+   #o_xAutomatic := #i_xReqAutomatic;
+   
+   // override never 0, never above 60 until the scaling bug is fixed
+   IF #i_iOverride < 1 THEN
+      #o_iOverride := 10;
+   ELSIF #i_iOverride > 60 THEN
+      #o_iOverride := 60;
+   ELSE
+      #o_iOverride := #i_iOverride;
+   END_IF;
+   
+   // everything the owner may switch on is off first
+   #o_xStart := FALSE;
+   #o_xStop := TRUE;
+   #o_iProgNo := 0;
+   #o_iAxis := 0;
+   #o_xJogMinus := FALSE;
+   #o_xJogPlus := FALSE;
+   #o_xHome := FALSE;
+   
+   CASE #o_iOwner OF
+      1: // hand: jog one way at a time, home, no start
+         #o_xStop := FALSE;
+         #o_iAxis := #i_iReqAxis;
+         #o_xJogMinus := #i_xReqJogMinus AND NOT #i_xReqJogPlus;
+         #o_xJogPlus := #i_xReqJogPlus AND NOT #i_xReqJogMinus;
+         #o_xHome := #i_xReqHome;
+         
+      2: // auto: the scan drives start, program number and stop
+         #o_xStart := #i_xReqStart;
+         #o_iProgNo := #i_iReqProgNo;
+         #o_xStop := #i_xReqStop;
+   END_CASE;
 END_FUNCTION

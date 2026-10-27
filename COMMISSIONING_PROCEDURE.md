@@ -137,7 +137,7 @@ Robot in Standby, drives may be off.
 
 **A1 Download and compile**
 - Do: compile hardware and software, download, CPU to RUN.
-- Check: 0 errors, 0 warnings about the new blocks. In the block list: 7 UDTs, `DB_Scan`, `DB_Job`, `DB_SrlLane`, `DB_HMI`, `DB_ScanJob`, `FC_AddRow`, `FC_GenRect`, `FC_SrlWindow`, `FC_ScanControl`, `FB_SrlMove`, `FB_ScanJob`.
+- Check: 0 errors, 0 warnings about the new blocks. In the block list: 7 UDTs, `DB_Scan`, `DB_Job`, `DB_SrlLane`, `DB_HMI`, `DB_ScanJob`, `FC_AddRow`, `FC_GenRect`, `FC_SrlWindow`, `FC_ScanControl`, `FC_CmdArbiter`, `FB_SrlMove`, `FB_ScanJob`.
 - If not: the error names the line. Word versus Int on the module 2 pins is the usual one.
 
 **A2 The two calls**
@@ -414,7 +414,7 @@ One line per step. Observed is what you saw, not what was expected.
 
 | Step | Expected | Observed | Pass | Date | Initials |
 | --- | --- | --- | --- | --- | --- |
-| A1 | 0 errors, 18 blocks | | | | |
+| A1 | 0 errors, 19 blocks | | | | |
 | A2 | two calls, all pins, one writer | | | | |
 | A3 | 10 ms, PIP of OB30 | | | | |
 | A4 | zeros, real fence | | | | |
