@@ -1,0 +1,237 @@
+// =============================================================================
+// OB30 (your OB33), cyclic interrupt 10 ms - the complete four networks, 2026-11-03.
+// one file since 2026-11-04 (the side folder "robot pose solution" is merged into this folder).
+//
+// built from your own OB30 of 2026-10-29 ("the actual ob30 of today.txt"). every pin
+// you have is kept as it is: start with ReadyToStart and MachineOn, module 2 enabled by
+// Cmd.Enable, REAL_TO_INT on the segments, your homing helper on the jog pins.
+// two changes: the stop pin takes the engine's program stop too (engine v0.5), and the
+// 35 pose pins and the 7 blending pins of the segments read "DB_RobotPath" instead of
+// "DB_App".Path.Seg (path mode, engine v0.6, automatic_today.md part 7). "DB_RobotPath"
+// is written by fb_robotmove before every path move. nothing else writes it. until part 7
+// is applied the segment pins may stay on "DB_App".Path.Seg, nothing reads them.
+//
+// one writer per tag: DB_App.HS only in network 1. DB_Robot.Status only in network 4.
+// ob30 delivers, ob1 decides.
+// =============================================================================
+
+REGION network 1 - handshake, the only writer of DB_App.HS
+IF "DB_MOVIKIT_Robotics-5AX".handshake_out = "DB_App".HS THEN
+  "DB_App".HS := NOT "DB_App".HS;
+  "DB_App".HS_Stall := 0;
+  "DB_App".HS_Alive := TRUE;
+  IF "DB_App".HS_Count >= 100000 THEN
+    "DB_App".HS_Count := 0;
+  ELSE
+    "DB_App".HS_Count := "DB_App".HS_Count + 1;
+  END_IF;
+ELSE
+  IF "DB_App".HS_Stall < 32000 THEN
+    "DB_App".HS_Stall := "DB_App".HS_Stall + 1;
+  END_IF;
+  IF "DB_App".HS_Stall > 200 THEN
+    "DB_App".HS_Alive := FALSE;
+  END_IF;
+END_IF;
+END_REGION
+
+
+REGION network 2 - module 1, slot 18, hw 278, robot words 1..64
+// control words po 1..4, then the seven standard path segments po 5..53.
+// the segment poses are srl pose[1..7] in the robot, the targets of blocks 5, 6, 7.
+"DB_MOVIKIT_Robotics-5AX"(HW_Identifier := 278,
+                          handshake_in := "DB_App".HS,
+                          enable := "DB_App".Cmd.Enable,                   // ob1 network 8, the one writer
+                          reset := "DB_App".Cmd.Reset,                     // old screen
+                          automatic := "DB_App".Cmd.Automatic,             // fb_robotmode, the one writer
+                          simulation := "DB_App".Cmd.Simulation,           // old screen
+                          override := "DB_App".Cmd.Override,               // fb_robotmove
+                          prog_no := "DB_App".Cmd.ProgramNumber,           // fb_robotmove, 20
+                          start := ("DB_App".Cmd.Start AND "DB_App".ReadyToStart AND "DB_App".MachineOn),   // Cmd.Start by fb_robotmove
+                          pause := "DB_App".Cmd.Pause,                     // old screen, stays off
+                          stop := ("DB_App".Cmd.Stop OR "DB_RobotMove".State.xPrgStop),   // old screen stays off, the engine pulses it in step 15 (engine v0.5, 2026-11-03)
+
+                          // referencing: sets the axis zero point. old screen, or the hand rungs later
+                          homing_Start_X1 := "DB_App".Cmd.Home_X1,
+                          homing_Start_Y1 := "DB_App".Cmd.Home_Y1,
+                          homing_Start_Z1 := "DB_App".Cmd.Home_Z1,
+                          homing_Start_R1 := "DB_App".Cmd.Home_R1,
+                          homing_Start_R2 := "DB_App".Cmd.Home_R2,
+
+                          // jog. old screen, or the hand rungs later. your homing helper is or-ed in
+                          jog_pos_J1X := ("DB_App".Cmd.Jog_Pos_X OR "DB_App".Home.JogP[1]),
+                          jog_pos_J2Y := ("DB_App".Cmd.Jog_Pos_Y OR "DB_App".Home.JogP[2]),
+                          jog_pos_J3Z := ("DB_App".Cmd.Jog_Pos_Z OR "DB_App".Home.JogP[3]),
+                          jog_pos_J4R1 := ("DB_App".Cmd.Jog_Pos_R1 OR "DB_App".Home.JogP[4]),
+                          jog_pos_J5R2 := ("DB_App".Cmd.Jog_Pos_R2 OR "DB_App".Home.JogP[5]),
+                          jog_neg_J1X := ("DB_App".Cmd.Jog_Neg_X OR "DB_App".Home.JogN[1]),
+                          jog_neg_J2Y := ("DB_App".Cmd.Jog_Neg_Y OR "DB_App".Home.JogN[2]),
+                          jog_neg_J3Z := ("DB_App".Cmd.Jog_Neg_Z OR "DB_App".Home.JogN[3]),
+                          jog_neg_J4R1 := ("DB_App".Cmd.Jog_Neg_R1 OR "DB_App".Home.JogN[4]),
+                          jog_neg_J5R2 := ("DB_App".Cmd.Jog_Neg_R2 OR "DB_App".Home.JogN[5]),
+                          jog_joint_base := ("DB_App".Cmd.Jog_Joint_Base OR "DB_App".Home.active),
+                          jog_axis_base := ("DB_App".Cmd.Jog_Axis AND NOT "DB_App".Home.active),
+
+                          // ---- the seven standard path segments, po words 5..53 ----------------
+                          // motion set, wait and path end stay on DB_App.Path.Seg: they belong to the
+                          // standard program of RobotMonitor, our blocks 5, 6, 7 do not read them.
+                          // the poses and the blending come from DB_RobotPath, written by fb_robotmove.
+                          // pose order: X, Y, Z, R1 = rotz, R2 = roty. whole mm and deg, like pose[51].
+
+                          Motion_Set_1 := "DB_App".Path.Seg[1].MotionSet,
+                          wait_1 := "DB_App".Path.Seg[1].Wait,
+                          path_end_1 := "DB_App".Path.Seg[1].PathEnd,
+                          blending_distance_1 := REAL_TO_INT("DB_RobotPath".aorBlend[1]),
+                          Pose_X_1  := REAL_TO_INT("DB_RobotPath".aoudtP[1].rX),      // srl pose[1]
+                          Pose_Y_1  := REAL_TO_INT("DB_RobotPath".aoudtP[1].rY),
+                          Pose_Z_1  := REAL_TO_INT("DB_RobotPath".aoudtP[1].rZ),
+                          Pose_R1_1 := REAL_TO_INT("DB_RobotPath".aoudtP[1].rRotZ),
+                          Pose_R2_1 := REAL_TO_INT("DB_RobotPath".aoudtP[1].rRotY),
+
+                          Motion_Set_2 := "DB_App".Path.Seg[2].MotionSet,
+                          wait_2 := "DB_App".Path.Seg[2].Wait,
+                          path_end_2 := "DB_App".Path.Seg[2].PathEnd,
+                          blending_distance_2 := REAL_TO_INT("DB_RobotPath".aorBlend[2]),
+                          Pose_X_2  := REAL_TO_INT("DB_RobotPath".aoudtP[2].rX),      // srl pose[2]
+                          Pose_Y_2  := REAL_TO_INT("DB_RobotPath".aoudtP[2].rY),
+                          Pose_Z_2  := REAL_TO_INT("DB_RobotPath".aoudtP[2].rZ),
+                          Pose_R1_2 := REAL_TO_INT("DB_RobotPath".aoudtP[2].rRotZ),
+                          Pose_R2_2 := REAL_TO_INT("DB_RobotPath".aoudtP[2].rRotY),
+
+                          Motion_Set_3 := "DB_App".Path.Seg[3].MotionSet,
+                          wait_3 := "DB_App".Path.Seg[3].Wait,
+                          path_end_3 := "DB_App".Path.Seg[3].PathEnd,
+                          blending_distance_3 := REAL_TO_INT("DB_RobotPath".aorBlend[3]),
+                          Pose_X_3  := REAL_TO_INT("DB_RobotPath".aoudtP[3].rX),      // srl pose[3]
+                          Pose_Y_3  := REAL_TO_INT("DB_RobotPath".aoudtP[3].rY),
+                          Pose_Z_3  := REAL_TO_INT("DB_RobotPath".aoudtP[3].rZ),
+                          Pose_R1_3 := REAL_TO_INT("DB_RobotPath".aoudtP[3].rRotZ),
+                          Pose_R2_3 := REAL_TO_INT("DB_RobotPath".aoudtP[3].rRotY),
+
+                          Motion_Set_4 := "DB_App".Path.Seg[4].MotionSet,
+                          wait_4 := "DB_App".Path.Seg[4].Wait,
+                          path_end_4 := "DB_App".Path.Seg[4].PathEnd,
+                          blending_distance_4 := REAL_TO_INT("DB_RobotPath".aorBlend[4]),
+                          Pose_X_4  := REAL_TO_INT("DB_RobotPath".aoudtP[4].rX),      // srl pose[4]
+                          Pose_Y_4  := REAL_TO_INT("DB_RobotPath".aoudtP[4].rY),
+                          Pose_Z_4  := REAL_TO_INT("DB_RobotPath".aoudtP[4].rZ),
+                          Pose_R1_4 := REAL_TO_INT("DB_RobotPath".aoudtP[4].rRotZ),
+                          Pose_R2_4 := REAL_TO_INT("DB_RobotPath".aoudtP[4].rRotY),
+
+                          Motion_Set_5 := "DB_App".Path.Seg[5].MotionSet,
+                          wait_5 := "DB_App".Path.Seg[5].Wait,
+                          path_end_5 := "DB_App".Path.Seg[5].PathEnd,
+                          blending_distance_5 := REAL_TO_INT("DB_RobotPath".aorBlend[5]),
+                          Pose_X_5  := REAL_TO_INT("DB_RobotPath".aoudtP[5].rX),      // srl pose[5]
+                          Pose_Y_5  := REAL_TO_INT("DB_RobotPath".aoudtP[5].rY),
+                          Pose_Z_5  := REAL_TO_INT("DB_RobotPath".aoudtP[5].rZ),
+                          Pose_R1_5 := REAL_TO_INT("DB_RobotPath".aoudtP[5].rRotZ),
+                          Pose_R2_5 := REAL_TO_INT("DB_RobotPath".aoudtP[5].rRotY),
+
+                          Motion_Set_6 := "DB_App".Path.Seg[6].MotionSet,
+                          wait_6 := "DB_App".Path.Seg[6].Wait,
+                          path_end_6 := "DB_App".Path.Seg[6].PathEnd,
+                          blending_distance_6 := REAL_TO_INT("DB_RobotPath".aorBlend[6]),
+                          Pose_X_6  := REAL_TO_INT("DB_RobotPath".aoudtP[6].rX),      // srl pose[6]
+                          Pose_Y_6  := REAL_TO_INT("DB_RobotPath".aoudtP[6].rY),
+                          Pose_Z_6  := REAL_TO_INT("DB_RobotPath".aoudtP[6].rZ),
+                          Pose_R1_6 := REAL_TO_INT("DB_RobotPath".aoudtP[6].rRotZ),
+                          Pose_R2_6 := REAL_TO_INT("DB_RobotPath".aoudtP[6].rRotY),
+
+                          Motion_Set_7 := "DB_App".Path.Seg[7].MotionSet,
+                          wait_7 := "DB_App".Path.Seg[7].Wait,
+                          path_end_7 := "DB_App".Path.Seg[7].PathEnd,
+                          blending_distance_7 := REAL_TO_INT("DB_RobotPath".aorBlend[7]),
+                          Pose_X_7  := REAL_TO_INT("DB_RobotPath".aoudtP[7].rX),      // srl pose[7]
+                          Pose_Y_7  := REAL_TO_INT("DB_RobotPath".aoudtP[7].rY),
+                          Pose_Z_7  := REAL_TO_INT("DB_RobotPath".aoudtP[7].rZ),
+                          Pose_R1_7 := REAL_TO_INT("DB_RobotPath".aoudtP[7].rRotZ),
+                          Pose_R2_7 := REAL_TO_INT("DB_RobotPath".aoudtP[7].rRotY));
+
+// your copy of 2026-10-29 had no Motion_Set_1, wait_1, path_end_1, blending_distance_1 lines.
+// they are written here like the other six. if the fb does not have one of these pins, the
+// compiler names it: delete that line, nothing else depends on it.
+END_REGION
+
+
+REGION network 3 - module 2, slot 19, hw 272, robot words 65..128, fb v0.7
+// po block 2 after the movisuite change of 15 oct 2026:
+//    word       index   content
+//    65..113     1..49   segments 8..14, disabled   (word 65 also carries the handshake)
+//    114..118   50..54   pose 51   x y z rotz roty  = the target of blocks 1..4, the last point of a path
+//    119..122   55..58   srl real 51..54            = radius, arc angle, free, run number
+//    123           59    setpoint bools 51..58      = the gates of blocks 1..8
+// pi block 2:
+//    65..80      1..16   srl real 71..86            = block echo, run echo
+//    81            17    srl bools 71..74
+"DB_MOVIKIT_ROBOTICS_Module2"(HW_Identifier_M2 := 272,      // slot 19
+                              enable           := "DB_App".Cmd.Enable,   // your choice. the file of 2026-10-29 said TRUE; with Cmd.Enable, comm ok follows the enable switch
+                              handshake_in     := "DB_App".HS,
+                              SrlFirstWord     := 1,        // pi 65 = srl real 71
+                              HandshakeWord    := 1,        // po 65, bit 15
+                              SrlDivisor       := 1.0,      // 0 decimal places
+
+                              // ---- bools the robot sends (read) ------------
+                              // pi 81 srl bools.  81 - 64 = 17
+                              BoolWord         := 17,
+
+                              // ---- segments 8..14 -------------------------
+                              // they exist (wizard: 7 + 7 = 14) but nothing
+                              // feeds them. false keeps them zeroed
+                              SegEnable        := FALSE,
+                              SegFirstWord     := 1,
+
+                              // ---- pose 51, the target of every single move ----
+                              PoseEnable       := TRUE,
+                              PoseFirstWord    := 50,       // -> words 114..118
+                              PoseX            := "DB_App".Srl.Pose[1],   // written by fb_robotmove
+                              PoseY            := "DB_App".Srl.Pose[2],
+                              PoseZ            := "DB_App".Srl.Pose[3],
+                              PoseRotZ         := "DB_App".Srl.Pose[4],
+                              PoseRotY         := "DB_App".Srl.Pose[5],
+
+                              // ---- the gate bools 51..58 --------------------
+                              BoolWriteEnable  := "DB_App".Srl.GateEnable,   // written by fb_robotmove
+                              BoolWriteWord    := 59,       // -> word 123
+                              WrBool1 := "DB_App".Srl.Gate[1],   // bool[51] block 1 linear
+                              WrBool2 := "DB_App".Srl.Gate[2],   // bool[52] block 2 linear slow
+                              WrBool3 := "DB_App".Srl.Gate[3],   // bool[53] block 3 circle ccw, one quarter
+                              WrBool4 := "DB_App".Srl.Gate[4],   // bool[54] block 4 circle cw, one quarter
+                              WrBool5 := "DB_App".Srl.Gate[5],   // bool[55] block 5 rectangle, 7 lin on pose[1..7]
+                              WrBool6 := "DB_App".Srl.Gate[6],   // bool[56] block 6 circle ccw, 4 arcs on pose[1..4]
+                              WrBool7 := "DB_App".Srl.Gate[7],   // bool[57] block 7 circle cw, 4 arcs
+                              WrBool8 := "DB_App".Srl.Gate[8],   // bool[58] free
+
+                              // ---- the setpoint reals 51..54 -----------------
+                              ParamWriteEnable := TRUE,
+                              ParamFirstWord   := 55,       // -> word 119
+                              ParamWordSize    := 1,
+                              ParamCount       := 4,
+                              ParamMultiplier  := 1.0,
+
+                              Param1 := "DB_App".Srl.Par[1],   // real[51]  radius of a circle block
+                              Param2 := "DB_App".Srl.Par[2],   // real[52]  arc angle, 90, for a circle line written as radius + angle
+                              Param3 := "DB_App".Srl.Par[3],   // real[53]  free
+                              Param4 := "DB_App".Srl.Par[4],   // real[54]  run number, written by fb_robotmove
+
+                              // ---- outputs --------------------------------
+                              SrlBool1         => "DB_App".Srl.In[1],   // word 81 bit 0, bool[71]
+                              SrlBool2         => "DB_App".Srl.In[2],   // word 81 bit 1, bool[72]
+                              SrlBool3         => "DB_App".Srl.In[3],   // bit 2, bool[73]
+                              SrlBool4         => "DB_App".Srl.In[4],   // bit 3, bool[74]
+
+                              Communication_OK => "DB_App".Srl.CommOk);
+
+// handshake_out of module 2 is always false by design. leave it unconnected.
+// the srl reals the robot sends stay in the instance db, read by ob1:
+//    "DB_MOVIKIT_ROBOTICS_Module2".SrlRealRaw[1]   real[71]  block that ran   -> fb_robotmove i_intEchoBlock
+//    "DB_MOVIKIT_ROBOTICS_Module2".SrlRealRaw[2]   real[72]  run number echo  -> fb_robotmove i_intEchoRun
+END_REGION
+
+
+REGION network 4 - status map, the only writer of DB_Robot.Status
+"FC_RobotStatusMap"(i_aowPI     := "DB_MOVIKIT_Robotics-5AX".PI,
+                    i_xHsAlive  := "DB_App".HS_Alive,
+                    i_xM2CommOK := "DB_App".Srl.CommOk,
+                    o_udtStatus => "DB_Robot".Status);
+END_REGION
