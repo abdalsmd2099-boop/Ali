@@ -1,6 +1,9 @@
 FUNCTION_BLOCK "FB_CubeButtons"
 { S7_Optimized_Access := 'TRUE' }
-VERSION : 0.1
+VERSION : 0.2
+// v0.2 (2026-11-05): a go to writes the whole hand request, not only pose and block: id = the
+// pose number (hmi text), no path, no parameters. before, intPathLen and aorPar kept whatever
+// stood in the db, and a go to could become a path move with stale poses.
 // 2026-11-03. the buttons and lamps of the cube box on the automatic screen, without any
 // hmi script. every button of the screen writes ONE bit into "DB_RobotHand".Btn, this block
 // turns the bits into what the other blocks expect:
@@ -126,11 +129,23 @@ BEGIN
       IF #i_xGoStart AND NOT #xGoStartOld AND #i_aoxValid[#P_START] THEN
          #io_udtMan.udtPose := #i_aoudtP[#P_START];
          #io_udtMan.intBlock := #BLOCK_LIN;
+         #io_udtMan.intId := #P_START;           // v0.2: the whole request is ours on a go to
+         #io_udtMan.intPathLen := 0;
+         #io_udtMan.rBlend := 0.0;
+         #io_udtMan.aorPar[1] := 0.0;
+         #io_udtMan.aorPar[2] := 0.0;
+         #io_udtMan.aorPar[3] := 0.0;
          #io_xManStart := TRUE;
          #xGoPulse := TRUE;
       ELSIF #i_xGoC1 AND NOT #xGoC1Old AND #i_aoxValid[#P_C1] THEN
          #io_udtMan.udtPose := #i_aoudtP[#P_C1];
          #io_udtMan.intBlock := #BLOCK_LIN;
+         #io_udtMan.intId := #P_C1;
+         #io_udtMan.intPathLen := 0;
+         #io_udtMan.rBlend := 0.0;
+         #io_udtMan.aorPar[1] := 0.0;
+         #io_udtMan.aorPar[2] := 0.0;
+         #io_udtMan.aorPar[3] := 0.0;
          #io_xManStart := TRUE;
          #xGoPulse := TRUE;
       END_IF;

@@ -79,6 +79,17 @@ Rules that make the engine work:
 - Line 22 must wait for the movement. The PLC takes "program finished" as "the robot stands at the target". Without the wait, finished comes while the robot still moves, the engine reports done too early and the next move is refused with error 6.
 - If RobotMonitor asks for the IF as a comparison: operand 1 var BOOL 51, operator `=`, operand 2 val TRUE. Same thing.
 
+## 3b. Two lines more (2026-11-05, `DOCS/ENGINE_REVIEW_2026-11-04.md` section 3)
+
+The manual (2570-2576) says that variables and expressions in the SRL program are not synchronous with the movement: a `CALC_REALVAR` is processed when the program pointer reaches it, milliseconds after the start, while the robot still moves. So the echo lines prove that a block was interpreted, not that the robot arrived. Only `END_PROG` with "wait for the movement to end" ties "program finished" to arrival. Two lines make the echoes say more:
+
+| Line | New Block | Fields | Means |
+|---|---|---|---|
+| 0, before line 1 | `CALC_REALVAR` | target: REAL, index **71**. Operand 1: val, **0** | clears the block echo at every run. Then REAL 71 = n proves block n ran in THIS run, and engine error 10 also catches a run in which no gate was taken |
+| 20a, before line 21 | `WAIT_MOTION` | argument **Motion_Done** (manual 14022-14031) | the program pointer waits until the motion is done. Line 21 then writes REAL 72 at standstill, and REAL 72 = run number means "arrived" |
+
+Nothing changes in the PLC for these two lines. The bullet in section 3 about line 22 stays true, the reason is `END_PROG` wait, not the echo line.
+
 ## 3a. The program as it stands on your robot (photo of 2026-11-02) and what to check
 
 RobotMonitor names the variables that sit on the bus by their process data words. Your names and ours:

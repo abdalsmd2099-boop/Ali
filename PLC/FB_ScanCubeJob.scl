@@ -1,6 +1,6 @@
 FUNCTION_BLOCK "FB_ScanCubeJob"
 { S7_Optimized_Access := 'TRUE' }
-VERSION : 0.6
+VERSION : 0.7
 // stage 2 step 7. one button, one cube scan. turns goals.md section 3 into queue entries.
 // no motion code here: it builds a list of poses, checks all of them, then pushes them
 // into fb_movequeue. the engine does the rest.
@@ -39,6 +39,16 @@ VERSION : 0.6
 // corner 1 may then stand at any rotz, nothing adds to it. for a test, or a sensor that does not
 // care which side it faces. off = exactly v0.5.
 //
+// v0.7 (2026-11-05, after the review docs/engine_review_2026-11-04.md): the checks of step 10 keep
+// the first cause (before, the last one won and intMoveActive kept an old index beside the error).
+// new pin i_intBlocksInPrg20 at the end: path mode with block 5 not yet in program 20 is refused
+// before the first move, new job error 7 (before: three moves, then engine error 1 at corner 1).
+// safe z must lie above corner 1, else error 2 (before: approach and lift would dive at the cube).
+// with turns, corner 1 must stand at rotz -180, new job error 8 with its own text (before: error 4
+// "outside the limits" at the turn index, which confused the operator on 2026-11-04). the fourth
+// turn still goes to +180, the joint 4 limit: hand-move to rotz +180 once before the first scan
+// with turns (engine_review section 6, finding 7).
+//
 // how the corners are taught in taught mode (poses 4..7 = c1..c4):
 //    teach every corner with the tool facing the side that STARTS there.
 //    side n is then "go to the xyz of corner n+1 with the orientation of corner n",
@@ -68,6 +78,7 @@ VERSION : 0.6
       i_xActualValid : Bool;                    // "DB_Robot".Status.xReferenced AND .xCommOK            (v0.3)
       i_xPathMode : Bool;                       // "DB_Recipe".xPathMode: the rectangle as one program run   (v0.5)
       i_xNoTurn : Bool;                         // "DB_Recipe".xNoTurn: no turn at the corners, the turn entries are not pushed   (v0.6)
+      i_intBlocksInPrg20 : Int;                 // "DB_RobotMove".Cfg.intBlocksInPrg20: path mode needs block 5   (v0.7)
    END_VAR
 
    VAR_OUTPUT
@@ -165,34 +176,46 @@ BEGIN
             #intStep := 10;
          END_IF;
 
-      10: // build the list and check it. nothing goes out of this block yet
+      10: // build the list and check it. nothing goes out of this block yet.
+          // v0.7: every check runs only while no error is set, so the first cause is the one shown
          #tmp_intErr := 0;
+         #o_udtState.intMoveActive := 0;        // v0.7: no index from an old scan beside a new error
          #tmp_xDim := #i_rLength > 0.0 AND #i_rWidth > 0.0;   // v0.2: both given = computed corners
          #tmp_xHere := #i_xFromHere AND #tmp_xDim AND #i_xActualValid;   // v0.3
 
          IF #tmp_xHere THEN
             IF NOT #i_aoxValid[#P_START] THEN
                #tmp_intErr := 1;                // start not taught
+               #o_udtState.intMoveActive := #P_START;
             END_IF;
          ELSIF #tmp_xDim THEN
-            IF NOT #i_aoxValid[#P_START] OR NOT #i_aoxValid[#P_C1] THEN
-               #tmp_intErr := 1;                // start or corner 1 not taught
+            IF NOT #i_aoxValid[#P_START] THEN
+               #tmp_intErr := 1;                // start not taught
+               #o_udtState.intMoveActive := #P_START;
+            ELSIF NOT #i_aoxValid[#P_C1] THEN
+               #tmp_intErr := 1;                // corner 1 not taught
+               #o_udtState.intMoveActive := #P_C1;
             END_IF;
          ELSE
             FOR #tmp_i := #P_START TO #P_C4 DO
-               IF NOT #i_aoxValid[#tmp_i] THEN
-                  #tmp_intErr := 1;             // a cube pose is not taught
+               IF NOT #i_aoxValid[#tmp_i] AND #tmp_intErr = 0 THEN
+                  #tmp_intErr := 1;             // a cube pose is not taught. the first missing row is shown
+                  #o_udtState.intMoveActive := #tmp_i;
                END_IF;
             END_FOR;
          END_IF;
-         IF #i_rSafeZ <= 0.0 THEN
+         IF #tmp_intErr = 0 AND #i_rSafeZ <= 0.0 THEN
             #tmp_intErr := 2;                   // safe z not set
          END_IF;
-         IF #i_udtMoveState.xBusy OR #i_udtMoveState.xError THEN
+         IF #tmp_intErr = 0 AND (#i_udtMoveState.xBusy OR #i_udtMoveState.xError) THEN
             #tmp_intErr := 3;                   // engine busy or in error
          END_IF;
-         IF #i_xFromHere AND NOT #tmp_xHere THEN
+         IF #tmp_intErr = 0 AND #i_xFromHere AND NOT #tmp_xHere THEN
             #tmp_intErr := 6;                   // scan from here: no length and width, or actual pose not valid
+         END_IF;
+         IF #tmp_intErr = 0 AND #i_xPathMode AND #i_intBlocksInPrg20 < #BLOCK_RECT THEN
+            #tmp_intErr := 7;                   // v0.7: path mode, but block 5 is not in program 20 yet
+            #o_udtState.intMoveActive := #ID_PATH;
          END_IF;
 
          IF #tmp_intErr = 0 THEN
@@ -244,6 +267,18 @@ BEGIN
                #tmp_udtC4.rRotZ := #tmp_udtC1.rRotZ;
                #tmp_udtC4.rRotY := #tmp_udtC1.rRotY;
                #tmp_rRotZEnd := #tmp_udtC1.rRotZ;
+            END_IF;
+
+            // v0.7: safe z must lie above corner 1. below it, the approach and the lift would dive
+            // at the cube instead of clearing it (safe z 450 with the poses at z 691, 2026-11-02)
+            IF #i_rSafeZ <= #tmp_udtC1.rZ THEN
+               #tmp_intErr := 2;
+            END_IF;
+            // v0.7: with turns, corner 1 must stand at rotz -180, the four +90 turns end at +180.
+            // its own number and text, instead of error 4 "outside the limits" at the turn index
+            IF #tmp_intErr = 0 AND #tmp_xDim AND NOT #i_xNoTurn AND ABS(#tmp_udtC1.rRotZ + 180.0) > 0.5 THEN
+               #tmp_intErr := 8;
+               #o_udtState.intMoveActive := 3;  // the corner 1 entry
             END_IF;
 
             // the 14 poses, goals.md section 3
@@ -388,8 +423,10 @@ BEGIN
    #o_udtState.intStep := #intStep;
 
    // job error numbers
-   //  1 a cube pose is not taught: taught mode 2..7, dimension mode 2 and 4, scan from here 2
-   //  2 safe z not set                          4 a pose of the job is outside the limits, see intMoveActive
+   //  1 a cube pose is not taught: taught mode 2..7, dimension mode 2 and 4, scan from here 2. the row is in intMoveActive (v0.7)
+   //  2 safe z not set, or not above corner 1 (v0.7)      4 a pose of the job is outside the limits, see intMoveActive
    //  3 engine busy or in error at start        6 scan from here not possible: no length and width, or the robot is not referenced
+   //  7 path mode on, block 5 not in program 20 (Cfg.intBlocksInPrg20 < 5)   (v0.7)
+   //  8 turns on, corner 1 not at rotz -180   (v0.7)
    // 10 the engine went into error, see intEngineErr
 END_FUNCTION_BLOCK
