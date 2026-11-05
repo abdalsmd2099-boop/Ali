@@ -19,9 +19,70 @@ wrong number costs an hour of searching at the machine.
 
 | List | Wrong today | Right |
 |---|---|---|
-| TL_JobErr | 4 = "error at start, or engine busy" | 3 = engine busy or in error at start. 4 = a pose outside the limits, see MoveActive. 5 = drum radius not set. 6 = scan from here not possible. 10 = engine error, see engine error |
-| TL_Step | no entry 0 ("Default") | 0 = idle, 5 = check, 10 = write, 15 = program stop, 20 = settle, 30 = start, 40 = wait running, 50 = wait finished, 60 = end, 90 = error |
-| TL_Err | 15, 16 missing? | 15 = program stop not taken, 16 = path longer than 7. Full list in `GOALS.md` 5.5 |
+| TL_JobErr | 4 = "error at start, or engine busy" | 3 = engine busy or in error at start. 4 = a pose outside the limits, see MoveActive. 5 = drum radius not set. 6 = scan from here not possible. 10 = engine error, see engine error. v0.7 (2026-11-05): 7 = path mode on, block 5 not in program 20. 8 = turns on, corner 1 not at RotZ −180 |
+| TL_Step | no entry 0 ("Default") | 0 = idle, 5 = check, 10 = write, 15 = program stop, 20 = settle, 30 = start, 40 = wait running, 50 = wait finished, 60 = end, 90 = error. v0.7: 95 = stopping the robot after an error |
+| TL_Err | 15, 16 missing? | 15 = program stop not taken, 16 = path longer than 7. v0.7: 17 = path block without a path, 18 = program stopped or paused from outside. Full list in `GOALS.md` 5.5 |
+
+### 2.1 The complete text lists for v0.7 (2026-11-05), copy as they stand
+
+`TL_Err` on `"DB_RobotMove".State.intErrId` and on `"DB_RobotJob".State.intEngineErr`:
+
+| Nr | Text |
+|---|---|
+| 0 | no error |
+| 1 | block not in program 20 |
+| 2 | X Y Z outside the limits |
+| 3 | RotZ RotY outside the limits |
+| 4 | circle without radius |
+| 5 | robot not ready: automatic, referenced, access, setpoints, STO, power |
+| 6 | robot moving or program running at start |
+| 7 | communication not ok |
+| 8 | override is 0 |
+| 10 | wrong block echoed |
+| 11 | no program running within 3 s |
+| 12 | no program finished in time |
+| 13 | run number echo wrong |
+| 14 | program 20 not ready |
+| 15 | program stop not taken |
+| 16 | path longer than 7 |
+| 17 | path block without a path |
+| 18 | program stopped or paused from outside |
+| 20 | aborted: enable fell |
+| 21 | aborted: robot fault |
+| 22 | aborted: access lost |
+
+`TL_Step` on `"DB_RobotMove".State.intStep`:
+
+| Nr | Text |
+|---|---|
+| 0 | idle |
+| 5 | check |
+| 10 | write |
+| 15 | program stop |
+| 20 | settle |
+| 30 | start |
+| 40 | wait running |
+| 50 | wait finished |
+| 60 | end |
+| 90 | error |
+| 95 | stopping the robot |
+
+`TL_JobErr` on `"DB_RobotJob".State.intErrId`:
+
+| Nr | Text |
+|---|---|
+| 0 | no error |
+| 1 | pose not taught, see active |
+| 2 | safe Z not set or below corner 1 |
+| 3 | engine busy or in error |
+| 4 | pose outside the limits, see active |
+| 5 | drum radius not set |
+| 6 | scan from here not possible |
+| 7 | path mode: block 5 not in program 20 |
+| 8 | turns: corner 1 not at RotZ −180 |
+| 10 | engine error, see engine error |
+
+`TL_Move` on `"DB_RobotJob".State.intMoveActive` stays 1 to 15 as before. With job error 1 the field shows the pose row (1 home, 2 start, 4 to 7 corners), with error 8 it shows 3 (corner 1), with error 7 it shows 15 (rectangle). The texts 1 to 15 fit all three cases well enough; do not add rows.
 
 ## 3. Objects to add
 
