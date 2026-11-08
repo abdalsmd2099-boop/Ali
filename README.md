@@ -29,3 +29,4 @@ Every change gets a dated row in `GOALS.md`.
 | Screens | `HMI/SCREENS.html` | https://claude.ai/artifact/K8eztVxRTwZqFbCw4vBh7p |
 | System map | `DOCS/SYSTEM_MAP.html` | https://claude.ai/artifact/AagbAehqpKH8WkBnqbmK3x |
 | Gantry full map | `DOCS/SOLUTION_MAP.html` | https://claude.ai/artifact/AQSZvUfrtDkGQrE52S4Lnv |
+| Screens V2 (RUN, SETUP, HAND, DIAG) | `HMI/SCREENS_V2.html` | https://claude.ai/artifact/XAX9Qbdy4iHmrQSPeb2Jqu |

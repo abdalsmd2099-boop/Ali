@@ -1,0 +1,330 @@
+<title>Gantry HMI Screens V2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* layout: one status strip, four screens behind tabs, each screen = a mock panel on top and the object table under it */
+  :root {
+    --bg: #eef0f2;
+    --panel: #ffffff;
+    --panel-2: #f6f7f9;
+    --fg: #1d2329;
+    --fg-2: #58636d;
+    --line: #cfd5db;
+    --accent: #1f5f8b;
+    --ok: #2e8b57;
+    --wait: #c48a0a;
+    --err: #b3261e;
+    --off: #a9b2ba;
+    --tag-bg: #e9edf1;
+    --font-ui: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+    --font-tag: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15191d; --panel: #1e2429; --panel-2: #262d33; --fg: #e6eaee; --fg-2: #9aa5af;
+      --line: #3a434c; --accent: #6fb1dc; --ok: #4cc27a; --wait: #e0a921; --err: #ef6c62; --off: #5c666f; --tag-bg: #2c343b;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15191d; --panel: #1e2429; --panel-2: #262d33; --fg: #e6eaee; --fg-2: #9aa5af;
+    --line: #3a434c; --accent: #6fb1dc; --ok: #4cc27a; --wait: #e0a921; --err: #ef6c62; --off: #5c666f; --tag-bg: #2c343b;
+    color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px; line-height: 1.45;
+         padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 1.45rem; font-weight: 600; margin: 0 0 4px; text-wrap: balance; }
+  h2 { font-size: 1.1rem; font-weight: 600; margin: 28px 0 10px; }
+  p { max-width: 70ch; margin: 6px 0; }
+  .muted { color: var(--fg-2); }
+  code, .tag { font-family: var(--font-tag); font-size: 0.86em; background: var(--tag-bg); padding: 1px 5px; border-radius: 3px; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin: 14px 0 6px; }
+  .rule { background: var(--panel); border: 1px solid var(--line); padding: 10px 12px; min-width: 0; }
+  .rule b { display: block; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+
+  /* tabs */
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 22px 0 12px; }
+  .tabs a { text-decoration: none; color: var(--fg); background: var(--panel); border: 1px solid var(--line); padding: 8px 14px; font-weight: 500; }
+  .tabs a.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tabs a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .screen { display: none; }
+  .screen.on { display: block; }
+
+  /* the mock panel */
+  .strip { display: flex; flex-wrap: wrap; gap: 8px; background: var(--panel-2); border: 1px solid var(--line); padding: 10px 10px 8px; margin-bottom: 8px; }
+  .strip .obj { flex: 1 1 120px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); padding: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  .box { border: 1px solid var(--line); padding: 10px; min-width: 0; }
+  .box > h4 { margin: 0 0 10px; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-2); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .obj { position: relative; border: 1px solid var(--line); padding: 8px 8px 6px; min-width: 0; flex: 1 1 100px; font-size: 0.86rem; background: var(--panel); margin-top: 6px; }
+  .obj .nr { position: absolute; top: -9px; right: 6px; background: var(--accent); color: #fff; font-family: var(--font-tag); font-size: 0.68rem; padding: 0 5px; border-radius: 2px; }
+  .obj .t { font-family: var(--font-tag); font-size: 0.72rem; color: var(--fg-2); display: block; overflow-wrap: anywhere; margin-top: 2px; }
+  .obj.button { border-width: 2px; font-weight: 600; text-align: center; }
+  .obj.button.grey { color: var(--off); border-color: var(--off); }
+  .obj.switch::before { content: "◐ "; color: var(--accent); }
+  .obj.field, .obj.out { font-family: var(--font-tag); background: var(--panel-2); }
+  .obj.lamp::before { content: "● "; }
+  .obj.lamp.ok::before { color: var(--ok); } .obj.lamp.wait::before { color: var(--wait); } .obj.lamp.err::before { color: var(--err); } .obj.lamp.off::before { color: var(--off); }
+  .obj.text { font-style: italic; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.82rem; color: var(--fg-2); margin: 8px 0 0; }
+
+  /* object tables */
+  .tbl { overflow-x: auto; margin-top: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; min-width: 760px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { font-size: 0.74rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fg-2); font-weight: 600; }
+  td:first-child { font-family: var(--font-tag); white-space: nowrap; }
+  td.tagcol { font-family: var(--font-tag); font-size: 0.8rem; }
+  .kind { display: inline-block; font-size: 0.72rem; padding: 0 6px; border: 1px solid var(--line); border-radius: 10px; color: var(--fg-2); white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <h1>Gantry HMI Screens V2</h1>
+  <p class="muted">Four screens sorted by who stands at the panel: RUN for the operator, SETUP for the scan preparation, HAND for commissioning, DIAG for you. One status strip on all four. Every object carries its PLC tag as the blocks of <code>PLC/</code> define it on 2026-11-05 (engine v0.7, cube job v0.7, select v0.3, cube buttons v0.2). The object numbers of <code>SCREENS.html</code> (A1 … A50, M1 … M40) stay valid; this page regroups them under new numbers T, R, S, H, D.</p>
+
+  <div class="rules">
+    <div class="rule"><b>One writer</b>A field or button is bound only to a tag whose writer in <code>BLOCK_MAP.md</code> B1 is "HMI". A block always wins against the screen.</div>
+    <div class="rule"><b>Buttons are bits</b>A button writes one bit, the PLC does the rest. No HMI scripts. Today: <code>"DB_RobotHand".Btn</code> for the cube box; MOVE, RESET, ABORT, START still write <code>Man.*</code> directly.</div>
+    <div class="rule"><b>Permission lamps</b>Every button that can be refused is greyed from a bit the PLC computes (<code>Lamp.xTeachAllowed</code>, <code>Lamp.xGoAllowed</code>). Nobody learns from an error number that something was not allowed.</div>
+    <div class="rule"><b>Numbers with texts</b>Every number that means something has its text list next to it: TL_Step, TL_Err, TL_JobErr, TL_Move, TL_Block. The lists for v0.7 are in <code>SCREEN_FIXES.md</code> 2.1.</div>
+    <div class="rule"><b>Four colours</b>green = allowed or done, grey = not allowed, yellow = waiting (steps 15, 20, 40, 50, 95), red = error. The same on all screens.</div>
+  </div>
+
+  <nav class="tabs" id="tabs">
+    <a href="#run" data-s="run">RUN</a>
+    <a href="#setup" data-s="setup">SETUP</a>
+    <a href="#hand" data-s="hand">HAND</a>
+    <a href="#diag" data-s="diag">DIAG</a>
+  </nav>
+
+  <h2>The status strip, the same on all four screens</h2>
+  <div class="strip" id="strip"></div>
+  <div class="tbl"><table id="strip-tbl"></table></div>
+
+  <section class="screen" id="s-run">
+    <h2>RUN, the operator</h2>
+    <p>Starts and stops the scan and reads the three numbers. No typed number, no teach, no jog. The job box and the engine box of today's Automatic screen, nothing else.</p>
+    <div class="panel" id="p-run"></div>
+    <div class="tbl"><table id="t-run"></table></div>
+  </section>
+
+  <section class="screen" id="s-setup">
+    <h2>SETUP, preparing a scan</h2>
+    <p>The cube numbers, the switches, teaching and the two go-to moves. No START: a scan is started from RUN after the setup is complete, and the ready lamp says when it is.</p>
+    <div class="panel" id="p-setup"></div>
+    <div class="tbl"><table id="t-setup"></table></div>
+  </section>
+
+  <section class="screen" id="s-hand">
+    <h2>HAND, commissioning</h2>
+    <p>Jog and home per axis, one single move with the five target fields. MOVE is greyed while AUTO is on. This is today's Robot move screen plus the hand rungs.</p>
+    <div class="panel" id="p-hand"></div>
+    <div class="tbl"><table id="t-hand"></table></div>
+  </section>
+
+  <section class="screen" id="s-diag">
+    <h2>DIAG, the watch table as a screen</h2>
+    <p>Every row of section 8 of the engine review as a field or a lamp, so the two open errors are read here and not in TIA. No button that moves the robot. Simulation and the robot reset stay here, they are the only writes.</p>
+    <div class="panel" id="p-diag"></div>
+    <div class="tbl"><table id="t-diag"></table></div>
+  </section>
+
+  <h2>What changes in the PLC for this layout</h2>
+  <p>Nothing for the screens as drawn: every tag exists. One step later, to close the last one-writer exception: MOVE, RESET, ABORT and START as bits in <code>"DB_RobotHand".Btn</code> (xMove, xReset, xAbort, xStart) and <code>FB_CubeButtons</code> v0.3 as their one writer, pulsing <code>Man.xStart</code>, <code>Man.xReset</code>, <code>"DB_RobotJob".Man.xStart</code>, <code>.xAbort</code>. Until then the four buttons write the <code>Man.*</code> tags as today, which is the documented exception of <code>BLOCK_MAP.md</code>.</p>
+  <div class="legend"><span>◐ switch</span><span>● lamp</span><span>bold frame = button</span><span>grey = greyed by a permission bit</span><span>monospace box = I/O field or output field</span></div>
+</div>
+
+<script>
+// every object once: nr, label, kind, tag, extra (text list, limits, permission), note
+// kinds: button, switch, field, out (output field), lamp, text
+const STRIP = [
+  ['T1','Mode','text','"DB_RobotJob".Man.xAuto','text by visibility: HAND / AUTO',''],
+  ['T2','Enable','lamp ok','"DB_RobotMove".Man.xEnable','',''],
+  ['T3','Robot','text','"DB_Robot".Status.xAutomatic, .xMoving, .xRepositionRequired, .xFault','one text by visibility: manual, automatic, moving, repositioning required, fault','the order is the priority: fault wins'],
+  ['T4','Step','out','"DB_RobotMove".State.intStep','TL_Step (0 … 95)','yellow while 15, 20, 40, 50, 95'],
+  ['T5','Job error','out','"DB_RobotJob".State.intErrId','TL_JobErr (0 … 10)','red when not 0'],
+  ['T6','Engine error','out','"DB_RobotMove".State.intErrId','TL_Err (0 … 22)','red when not 0. In a job the same number is also in State.intEngineErr'],
+  ['T7','ACK','button','"DB_RobotHand".Btn.xAck','momentary','engine reset and job abort in one cycle, FB_CubeButtons'],
+];
+
+const RUN = [
+  ['JOB', [
+    ['R1','AUTO','switch','"DB_RobotJob".Man.xAuto','','on = the queue drives, MOVE on HAND is dead'],
+    ['R2','Enable','switch','"DB_RobotMove".Man.xEnable','','off while a move runs = engine error 20, the robot is stopped (step 95)'],
+    ['R3','START','button','"DB_RobotJob".Man.xStart','momentary. grey while NOT xAuto OR State.xRunning OR NOT Lamp.xCubeReady','the cube job takes the edge'],
+    ['R4','ABORT','button','"DB_RobotJob".Man.xAbort','momentary','the running move finishes, nothing follows; also clears a job error'],
+    ['R5','Override %','field','"DB_RobotJob".Man.intOverride','limits 1 … 100','every move of the job'],
+    ['R6','Job','out','"DB_RobotJob".Man.intJob','TL_Job: 1 cube, 2 drum','field only with part 6'],
+  ]],
+  ['PROGRESS', [
+    ['R7','Moves done / total','out','"DB_RobotJob".State.intMovesDone, .intMovesTotal','',''],
+    ['R8','Active move','out','"DB_RobotJob".State.intMoveActive','TL_Move 1 … 15','with job error 1 the missing pose row, with 7 the rectangle, with 8 corner 1'],
+    ['R9','Job step','out','"DB_RobotJob".State.intStep','TL_JobStep 0 idle, 10 build, 20 push, 30 run, 90 error',''],
+    ['R10','Running / done / error','lamp ok','"DB_RobotJob".State.xRunning, .xDone, .xError','three lamps','green, green, red'],
+    ['R11','Queue','out','"DB_MoveQueue".intCount','','0 at the end of a job'],
+  ]],
+  ['ENGINE', [
+    ['R12','Busy / done / error','lamp ok','"DB_RobotMove".State.xBusy, .xDone, .xError','three lamps',''],
+    ['R13','Block','out','"DB_RobotMove".State.intBlockActive','TL_Block 1 … 7',''],
+    ['R14','Run nr','out','"DB_RobotMove".State.intRunNr','','must equal REAL[72] on DIAG after every move'],
+    ['R15','Engine error text','out','"DB_RobotJob".State.intEngineErr','TL_Err','the engine number behind job error 10'],
+  ]],
+  ['ROBOT', [
+    ['R16','Automatic','lamp ok','"DB_Robot".Status.xAutomatic','','off after a jog for half a second, FB_RobotMode'],
+    ['R17','Referenced','lamp ok','"DB_Robot".Status.xReferenced','',''],
+    ['R18','Setpoints active','lamp ok','"DB_Robot".Status.xSetpointActive','','off = no move possible, manual 9.4'],
+    ['R19','Repositioning required','lamp wait','"DB_Robot".Status.xRepositionRequired','','on after every jog; the next start goes through step 15'],
+    ['R20','Program finished','lamp ok','"DB_Robot".Status.xPrgFinished','','the normal rest state between moves'],
+    ['R21','Fault','lamp err','"DB_Robot".Status.xFault','','with the message id on DIAG'],
+  ]],
+];
+
+const SETUP = [
+  ['CUBE', [
+    ['S1','Length mm','field','"DB_Recipe".Cube.rLength','0 … 4000','0 and 0 = taught corners 5, 6, 7'],
+    ['S2','Width mm','field','"DB_Recipe".Cube.rWidth','0 … 4000',''],
+    ['S3','Angle °','field','"DB_Recipe".Cube.rAngle','−180 … 180','0 = side 1 along +X. Hint text next to it'],
+    ['S4','Safe Z mm','field','"DB_Poses".rSafeZ','−10 … 1908','must lie above corner 1, else job error 2 (v0.7)'],
+    ['S5','computed from corner 1','text','"DB_RobotHand".Lamp.xComputed','text by visibility','off = taught mode'],
+    ['S6','SCAN FROM HERE','switch','"DB_Recipe".xFromHere','','the actual pose is corner 1, the robot must stand'],
+    ['S7','PATH MODE','switch','"DB_Recipe".xPathMode','','needs Cfg.intBlocksInPrg20 ≥ 5, else job error 7'],
+    ['S8','NO TURN','switch','"DB_Recipe".xNoTurn','','corner 1 at any RotZ, 10 moves'],
+  ]],
+  ['TEACH', [
+    ['S9','TEACH HOME','button','"DB_RobotHand".Btn.xTeachHome','grey while NOT Lamp.xTeachAllowed','row 1'],
+    ['S10','TEACH START','button','"DB_RobotHand".Btn.xTeachStart','grey while NOT Lamp.xTeachAllowed','row 2'],
+    ['S11','TEACH CORNER 1','button','"DB_RobotHand".Btn.xTeachC1','grey while NOT Lamp.xTeachAllowed','row 4, RotZ −180 facing side 1 when turns are on'],
+    ['S12','home / start / c1 taught','lamp ok','"DB_Poses".aoxValid[1], [2], [4]','three lamps',''],
+    ['S13','Cube ready','lamp ok','"DB_RobotHand".Lamp.xCubeReady','','START on RUN is greyed without it'],
+    ['S14','Teach allowed','lamp ok','"DB_RobotHand".Lamp.xTeachAllowed','','enable AND NOT auto AND NOT busy'],
+    ['S15','Last taught','out','"DB_RobotJob".Teach.intLastTaught','','with xTaught / xRefused as two short lamps'],
+  ]],
+  ['GO TO', [
+    ['S16','GO TO START','button','"DB_RobotHand".Btn.xGoStart','grey while NOT Lamp.xGoAllowed','block 1 move to row 2, FB_CubeButtons v0.2 fills the whole request'],
+    ['S17','GO TO CORNER 1','button','"DB_RobotHand".Btn.xGoC1','grey while NOT Lamp.xGoAllowed','block 1 move to row 4'],
+    ['S18','Go allowed','lamp ok','"DB_RobotHand".Lamp.xGoAllowed','',''],
+  ]],
+  ['POSES', [
+    ['S19','Pose nr','field','"DB_RobotHand".Btn.intPoseNr','1 … 50','the row the two buttons below work on'],
+    ['S20','TEACH nr','button','"DB_RobotHand".Btn.xTeachNr','grey while NOT Lamp.xTeachAllowed',''],
+    ['S21','CLEAR nr','button','"DB_RobotHand".Btn.xClearNr','grey while NOT Lamp.xTeachAllowed',''],
+    ['S22','Rows 1 … 10','out','"DB_Poses".aoudtP[n].rX … rRotY, .aoxValid[n]','output fields and a valid lamp per row','typing into a row is the documented exception; teach, do not type'],
+  ]],
+];
+
+const HAND = [
+  ['SINGLE MOVE', [
+    ['H1','X Y Z RotZ RotY','field','"DB_RobotMove".Man.udtReq.udtPose.rX, .rY, .rZ, .rRotZ, .rRotY','limits of GOALS 1.4','whole mm and degrees'],
+    ['H2','Block','field','"DB_RobotMove".Man.udtReq.intBlock','1 … 8, TL_Block','5 … 7 by hand give error 17, no path'],
+    ['H3','Radius mm','field','"DB_RobotMove".Man.udtReq.aorPar[1]','0 … 5000','blocks 3 and 4'],
+    ['H4','Override %','field','"DB_RobotMove".Man.udtReq.intOverride','0 … 100','0 = keep'],
+    ['H5','MOVE','button','"DB_RobotMove".Man.xStart','momentary. grey while xAuto OR NOT xEnable OR State.xBusy','the engine takes the edge'],
+    ['H6','RESET','button','"DB_RobotMove".Man.xReset','momentary','clears an engine error, only from step 90'],
+    ['H7','Pose at end','out','"DB_RobotMove".State.udtPoseAtEnd.*','','the setpoint pose when the move ended'],
+  ]],
+  ['JOG', [
+    ['H8','X+ X−','button','"DB_App".Cmd.Jog_Pos_X, .Jog_Neg_X','held','the PLC switches the robot to manual by itself, FB_RobotMode'],
+    ['H9','Y+ Y−','button','"DB_App".Cmd.Jog_Pos_Y, .Jog_Neg_Y','held',''],
+    ['H10','Z+ Z−','button','"DB_App".Cmd.Jog_Pos_Z, .Jog_Neg_Z','held',''],
+    ['H11','RotZ+ RotZ−','button','"DB_App".Cmd.Jog_Pos_R1, .Jog_Neg_R1','held','joint 4, −180 … 180'],
+    ['H12','RotY+ RotY−','button','"DB_App".Cmd.Jog_Pos_R2, .Jog_Neg_R2','held','joint 5, ±10'],
+    ['H13','Manual','lamp wait','NOT "DB_Robot".Status.xAutomatic','','on while jogging and half a second after'],
+  ]],
+  ['HOME', [
+    ['H14','HOME X Y Z RotZ RotY','button','"DB_App".Cmd.Home_X1, .Home_Y1, .Home_Z1, .Home_R1, .Home_R2','momentary, the hand rungs make the 500 ms pulse','only in manual'],
+    ['H15','Axis referenced','lamp ok','"DB_Robot".Status.aoxAxisReferenced[1 … 5]','five lamps',''],
+  ]],
+  ['ACTUAL', [
+    ['H16','Pose','out','"DB_Robot".Status.udtPoseBcs.rX … rRotY','','the setpoint pose in base coordinates, equals the actual pose at standstill'],
+    ['H17','Speed mm/s','out','"DB_Robot".Status.intSpeed','',''],
+    ['H18','Moving','lamp wait','"DB_Robot".Status.xMoving','','green at standstill = the status map is wrong, every move gives error 6'],
+  ]],
+];
+
+const DIAG = [
+  ['PI 1 STATUS', [
+    ['D1','ready / STO inactive / power on','lamp ok','"DB_Robot".Status.xReady, .xStoInactive, .xPowerOn','three lamps','STO and power are in error 5 since v0.7'],
+    ['D2','moving / referenced / setpoints','lamp ok','"DB_Robot".Status.xMoving, .xReferenced, .xSetpointActive','three lamps',''],
+    ['D3','fault / warning / access','lamp err','"DB_Robot".Status.xFault, .xWarning, .xAccessGranted','three lamps','access off = RobotMonitor took over, error 22'],
+    ['D4','Message id','out','"DB_Robot".Status.uiMsgId','','32057 = 125.57 start edge ignored'],
+  ]],
+  ['PI 2 PROGRAM', [
+    ['D5','automatic','lamp ok','"DB_Robot".Status.xAutomatic','',''],
+    ['D6','initialized / running / paused / finished','lamp ok','"DB_Robot".Status.xPrgInitialized, .xPrgRunning, .xPrgPaused, .xPrgFinished','four lamps','one of them at a time, the state is an enum'],
+    ['D7','repositioning required / active','lamp wait','"DB_Robot".Status.xRepositionRequired, .xRepositionActive','two lamps','the error 15 watch: after a jog and a stop, 2.2 must come and 2.6 must fall'],
+    ['D8','Program nr','out','"DB_Robot".Status.intPrgNr','','20'],
+    ['D9','control type jog / ref / program','lamp wait','"DB_Robot".Status.xJogMode, .xRefMode, .xPrgMode','three lamps','all off = inactive, the start condition'],
+  ]],
+  ['TO THE ROBOT', [
+    ['D10','Cmd.Start','lamp ok','"DB_App".Cmd.Start','','the engine owns it, FALSE in idle since v0.7'],
+    ['D11','ReadyToStart / MachineOn','lamp ok','"DB_App".ReadyToStart, .MachineOn','two lamps','both must be on when a move starts, else error 11 with PO 2.2 off'],
+    ['D12','PO 2.2 start / PO 2.4 stop','lamp ok','"DB_MOVIKIT_Robotics-5AX".PO[2].%X2, .%X4','two lamps','what really reaches the robot. 2.4 must light in step 15 and 95'],
+    ['D13','Cmd.Stop / Cmd.Pause','lamp err','"DB_App".Cmd.Stop, .Cmd.Pause','two lamps','must be off; a held stop hides the engine\'s stop edge'],
+    ['D14','Program nr / Override on the bus','out','"DB_App".Cmd.ProgramNumber, .Cmd.Override','','20 before the first move since v0.7'],
+    ['D15','Gates 1 … 8','lamp ok','"DB_App".Srl.Gate[1 … 8]','eight lamps','exactly one on during a move, none in idle'],
+  ]],
+  ['ECHO AND BUS', [
+    ['D16','REAL 71 / REAL 72','out','"DB_MOVIKIT_ROBOTICS_Module2".SrlRealRaw[1], [2]','','block that ran, run number. 72 must equal State.intRunNr after a move'],
+    ['D17','Run nr / msg id at error','out','"DB_RobotMove".State.intRunNr, .uiMsgIdAtError','','the first number to read after an error 11'],
+    ['D18','Handshake alive / module 2 comm','lamp ok','"DB_App".HS_Alive, "DB_App".Srl.CommOk','two lamps','both off = error 7'],
+    ['D19','Remaining segments / target idx','out','"DB_Robot".Status.intRemainingSeg, .intTargetPoseIdx','','path mode: the segment the robot travels'],
+    ['D20','Program stop from the engine','lamp wait','"DB_RobotMove".State.xPrgStop','','on in step 15 and 95'],
+  ]],
+  ['OLD SCREEN, KEPT', [
+    ['D21','Simulation','switch','"DB_App".Cmd.Simulation','','the first START of a day runs with it on'],
+    ['D22','Robot reset','button','"DB_App".Cmd.Reset','momentary','the robot fault reset, manual 9.9'],
+    ['D23','Alarms','out','"DB_RobotJob".aoxAlarm[1 … 32]','alarm view, texts in HMI_STAGE2.md','engine 1 … 22, job 23 … 27, robot 28 … 32'],
+    ['D24','Blocks in program 20','field','"DB_RobotMove".Cfg.intBlocksInPrg20','1 … 8, admin','7 when blocks 5 … 7 are built'],
+  ]],
+];
+
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+function obj(o) {
+  const [nr, label, kind, tag, extra] = o;
+  const k = kind.split(' ');
+  const d = document.createElement('div');
+  d.className = 'obj ' + k.join(' ') + ((k[0] === 'button' && /grey while/.test(extra)) ? ' grey' : '');
+  d.innerHTML = '<span class="nr">' + nr + '</span>' + esc(label) + '<span class="t">' + esc(tag) + '</span>';
+  return d;
+}
+function rows(list) {
+  let h = '<thead><tr><th>Nr</th><th>Object</th><th>Kind</th><th>Tag</th><th>Text list, limits, permission</th><th>Note</th></tr></thead><tbody>';
+  for (const [nr, label, kind, tag, extra, note] of list) {
+    h += '<tr><td>' + nr + '</td><td>' + esc(label) + '</td><td><span class="kind">' + kind.split(' ')[0] + '</span></td><td class="tagcol">' + esc(tag) + '</td><td>' + esc(extra) + '</td><td>' + esc(note) + '</td></tr>';
+  }
+  return h + '</tbody>';
+}
+function panel(id, tid, boxes) {
+  const p = document.getElementById(id);
+  const all = [];
+  for (const [name, list] of boxes) {
+    const b = document.createElement('div'); b.className = 'box';
+    b.innerHTML = '<h4>' + esc(name) + '</h4>';
+    const r = document.createElement('div'); r.className = 'row';
+    for (const o of list) { r.appendChild(obj(o)); all.push(o); }
+    b.appendChild(r); p.appendChild(b);
+  }
+  document.getElementById(tid).innerHTML = rows(all);
+}
+(function () {
+  const s = document.getElementById('strip');
+  for (const o of STRIP) s.appendChild(obj(o));
+  document.getElementById('strip-tbl').innerHTML = rows(STRIP);
+  panel('p-run', 't-run', RUN);
+  panel('p-setup', 't-setup', SETUP);
+  panel('p-hand', 't-hand', HAND);
+  panel('p-diag', 't-diag', DIAG);
+  const names = ['run', 'setup', 'hand', 'diag'];
+  function show() {
+    const h = (location.hash || '#run').slice(1);
+    const cur = names.includes(h) ? h : 'run';
+    for (const n of names) document.getElementById('s-' + n).classList.toggle('on', n === cur);
+    for (const a of document.querySelectorAll('#tabs a')) a.classList.toggle('on', a.dataset.s === cur);
+  }
+  window.addEventListener('hashchange', show);
+  show();
+})();
+</script>
