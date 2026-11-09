@@ -60,6 +60,7 @@ The order in OB1 is the data flow of one cycle: teach → job pushes → queue s
 | `UDT_MoveQueue` | TIA | `DB_MoveQueue.Q` | the FIFO: 50 entries, head, tail, count |
 | `UDT_JobState` | TIA | `DB_RobotJob.State` | running, done, error, error number, step, moves total / done / active, engine error |
 | `UDT_JobOut` | **folder** | `DB_RobotJob.Cube`, `.Drum` after part 6 | one job's pushes and state together: `xPushReq`, `udtPush`, `xClear`, `udtState`. So `FC_JobMux` copies one of them |
+| `UDT_LineGeo` v0.1 (2026-11-09) | **folder** | `IDB_ScanLineJob.udtGeo` (static), the input of `FC_LineMove` | the geometry of one line scan frozen at START: count, first, home, lift, zigzag, start point, directions, pitch, length, lead-in, the three heights, the two RotZ, pose 2 and 1, moves total. The job keeps no list of moves since v0.2 |
 
 ### A3. DBs (data) and who writes what
 
@@ -88,7 +89,8 @@ The order in OB1 is the data flow of one cycle: teach → job pushes → queue s
 | `FC_PoseCheck` | TIA | inside `FB_RobotMove` step 5 and `FB_ScanCubeJob` step 10. Not in OB1 | one `UDT_Pose` | return value 0 ok, 2 xyz outside, 3 rotation outside. Limits X 0..4380, Y 0..4230, Z −10..1908, RotZ ±180, RotY ±10 |
 | `FC_MoveSelect` v0.2 | TIA after step 1 | OB1 NW12, before the engine | hand / auto, `DB_RobotMove.Man`, `DB_MoveQueue.Head`, `.xHeadValid`, `DB_RobotMove.State` | `DB_RobotMove.Req`, `.xReqStart`. Auto wins. In auto the start is a level: head valid, engine not busy, not done, no error. The engine takes the edge |
 | `FC_RobotAlarms` | TIA | OB1 NW13 | `DB_RobotMove.State`, `DB_RobotJob.State`, `DB_Robot.Status` | `DB_RobotJob.aoxAlarm[1..32]` |
-| `FC_JobMux` | **folder** | OB1, after the two jobs, before the queue | `DB_RobotJob.Man.intJob`, `.Cube`, `.Drum` | `DB_RobotJob.Push`, `.State`, `.intJobActive`. Follows `intJob` only while no job runs |
+| `FC_JobMux` v0.2 | **folder** | OB1, after the job boxes, before the queue | `DB_RobotJob.Man.intJob`, `.Cube`, `.Drum`, `.Line` (v0.2, 2026-11-09) | `DB_RobotJob.Push`, `.State`, `.intJobActive`. Follows `intJob` (1, 2, 3) only while no job runs |
+| `FC_LineMove` v0.1 (2026-11-09) | **folder** | inside `FB_ScanLineJob` v0.2, steps 20 and the counting. Not in OB1 | one `UDT_LineGeo` and a move index | kind (1 … 11), line k and the target pose of that move. Pure, touches no DB. Checked against the v0.1 list for 4096 switch positions (identical) |
 
 ### A5. FBs (function blocks, with instance DB)
 
@@ -97,10 +99,11 @@ The order in OB1 is the data flow of one cycle: teach → job pushes → queue s
 | `FB_Teach` | TIA | `IDB_Teach` | OB1 NW9 | `DB_RobotJob.Teach`, allowed = Enable and not auto and engine not busy, valid = referenced and comm ok, `DB_Robot.Status.udtPoseBcs` | `DB_Poses.aoudtP[n]`, `.aoxValid[n]` (InOut), `DB_RobotJob.Teach.xTaught/xRefused/intLastTaught` |
 | `FB_ScanCubeJob` | v0.1 TIA, v0.5 **folder** (step 1b; v0.5 adds the path mode behind `i_xPathMode`) | `IDB_ScanCubeJob` | OB1 NW10 | `DB_RobotJob.Man`, `DB_Poses`, `DB_RobotMove.State`, `DB_MoveQueue.intCount`. v0.2: plus `DB_Recipe.Cube.*`, corners 2, 3, 4 and the approach computed from corner 1 when length and width > 0. v0.3 scan from here, v0.4 the turns −180 → +180, v0.5 `DB_Recipe.xPathMode` | `DB_RobotJob.Push`, `DB_RobotJob.State`. 13 moves, 14 with home, all block 1; path mode: 8 entries, the rectangle as block 5. After part 6: `DB_RobotJob.Cube` |
 | `FB_MoveQueue` | TIA | `IDB_MoveQueue` | OB1 NW11 | `DB_RobotJob.Push`, pop = `DB_RobotMove.State.xDone` | `DB_MoveQueue.Q` (InOut), `.Head`, `.xHeadValid`, `.intCount`, `.xFull`, `.xPushRefused` |
-| `FB_RobotMove` v0.3 in TIA, v0.6 in the folder (v0.4 gate with the pose, v0.5 program stop in step 15, v0.6 the path on `DB_RobotPath`, inert without a path) | TIA | `IDB_RobotMove` | OB1 NW12, after `FC_MoveSelect` | `DB_RobotMove.Req`, `.xReqStart`, `.Man.xEnable`, `.Man.xReset`, `.Cfg`, `DB_Robot.Status`, module 2 `SrlRealRaw[1..2]` | `DB_App.Srl.Pose/Par/Gate/GateEnable`, `DB_App.Cmd.Start/ProgramNumber/Override`, `DB_RobotPath.aoudtP/aorBlend` (all InOut), `DB_RobotMove.State` (Output; v0.5: `.xPrgStop` goes to the OB30 NW2 stop pin) |
+| `FB_RobotMove` v0.3 in TIA, v0.8 in the folder (v0.4 gate with the pose, v0.5 program stop in step 15, v0.6 the path on `DB_RobotPath`, inert without a path, v0.7 the 300 s for blocks 6 and 7, 2026-11-06; v0.8 the time limit grows with the way of the move, `Cfg.rMinSpeed`, 0 = as before, 2026-11-09) | TIA | `IDB_RobotMove` | OB1 NW12, after `FC_MoveSelect` | `DB_RobotMove.Req`, `.xReqStart`, `.Man.xEnable`, `.Man.xReset`, `.Cfg` (v0.8: `.Cfg.rMinSpeed` too), `DB_Robot.Status`, module 2 `SrlRealRaw[1..2]` | `DB_App.Srl.Pose/Par/Gate/GateEnable`, `DB_App.Cmd.Start/ProgramNumber/Override`, `DB_RobotPath.aoudtP/aorBlend` (all InOut), `DB_RobotMove.State` (Output; v0.5: `.xPrgStop` goes to the OB30 NW2 stop pin) |
 | `FB_RobotMode` | **folder**, step 1a | `IDB_RobotMode` | OB1 after NW8, before NW9 | the or of all jog and home commands and `DB_App.Home.active`, `DB_RobotJob.Man.xAuto`, `DB_RobotMove.State.xBusy`, `DB_Robot.Status` | `DB_App.Cmd.Automatic` (InOut). Automatic at rest, manual while a jog or home is wanted and nothing of ours moves, back 500 ms after standstill |
-| `FB_ScanDrumJob` v0.4 | **folder** | `IDB_ScanDrumJob` | OB1, after the cube job | the same as the cube job, plus `DB_Recipe.Drum.*` and pose 8, `DB_Recipe.xPathMode` | `DB_RobotJob.Drum`. Ten moves, four quarter arcs with blocks 3 and 4; path mode: 7 entries, the circle as block 6 or 7 |
-| `FB_MachineReady` | TIA, yours | yours | OB1 NW7 | | its Enable output is no longer wired. NW8 writes `Cmd.Enable` |
+| `FB_ScanDrumJob` v0.6 | **folder** | `IDB_ScanDrumJob` | OB1, after the cube job | the same as the cube job, plus `DB_Recipe.Drum.*` and pose 8, `DB_Recipe.xPathMode`, `DB_Recipe.xNoTurn` (v0.5, 2026-11-06) | `DB_RobotJob.Drum`. Ten moves, four quarter arcs with blocks 3 and 4; no turn: the same moves with the RotZ of pose 8 everywhere; path mode (v0.6, 2026-11-06): 7 entries, the circle as one line of block 6 or 7, the center in `POSE 51`, 360 in `REAL 52`, no `POSE 1..7`, needs the engine v0.7 |
+| `FB_ScanLineJob` v0.2 (2026-11-09; v0.1 the same morning) | **folder** | `IDB_ScanLineJob` | OB1, after the drum job, before the mux | the same as the drum job without the path mode, plus `DB_Recipe.Line.*` (13 fields, the last `xArea`), pose 9 and pose 10 (AREA), `DB_Recipe.xNoTurn`, `DB_Robot.Status.udtPoseBcs` also for the window bit | `DB_RobotJob.Line`, `.xScanWindow`, `.intLineActive`, `.intLineCount` (v0.2). n lines at one height, serpentine / raster / patch by the switches, blocks 1 and 2 only. v0.2: no list, every move computed by `FC_LineMove` when pushed (queue kept below 8), up to 5000 lines; the check before the first push on the four outer line ends at the three heights; AREA = the area by two taught corners, length and lines computed |
+| `FB_MachineReady` | TIA, yours. v0.2 in the folder (2026-11-05) | `DB_MachineReady` | OB1, before robot mode | `DB_App.MachineOn`, `.HS_Alive`, the module 1 FB outputs safe_stop / error / powered / referenced, `DB_Robot.Status.xAutomatic`, `DB_App.Cmd.Override`, `.ProgramNumber`, v0.2: `DB_RobotHand.Btn.xResetRobot` | `DB_App.Cmd.Reset` (one writer since v0.2), `.MachineReady`, `.ReadyToStart`, `.MissingNo`, `.MissingText`, `.ReadyState`, `.ReadyError`. Enable and Automatic outputs open: NW8 writes `Cmd.Enable`, `FB_RobotMode` writes `Cmd.Automatic`. The two coil rungs under its call (`Cmd.Start`, `Cmd.Automatic`) must go |
 | `"MOVIKIT_Robotics"` module 1 and 2 FBs | TIA, yours | the two MOVIKIT DBs | OB30 NW2, NW3 | `DB_App` | the bus |
 | `FB_ActRobot` | folder | none | not in OB1. Stage 3 | | |
 
@@ -121,6 +124,7 @@ This is what the cross-reference list in TIA shows for each pin: **R** for an In
 | `i_udtStatus` | Input, R | `"DB_Robot".Status` | all robot conditions |
 | `i_intEchoBlock` | Input, R | `"DB_MOVIKIT_ROBOTICS_Module2".SrlRealRaw[1]` | REAL[71], checked in step 60 |
 | `i_intEchoRun` | Input, R | `"DB_MOVIKIT_ROBOTICS_Module2".SrlRealRaw[2]` | REAL[72], checked in steps 40 and 60 |
+| `i_rMinSpeed` | Input, R | `"DB_RobotMove".Cfg.rMinSpeed` | v0.8 (2026-11-09): step 5 adds the way of the move / this speed to the time limit. 0 = off |
 | `io_aorSrlPose` | InOut, RW | `"DB_App".Srl.Pose` (the whole array [1..5]) | written in step 10, never read |
 | `io_aorSrlPar` | InOut, RW | `"DB_App".Srl.Par` (the whole array [1..4]) | written in step 10, never read. [4] = run number |
 | `io_aoxSrlGate` | InOut, RW | `"DB_App".Srl.Gate` (the whole array [1..8]) | all false in 10, 60, 90; one true in 30 |
@@ -248,7 +252,9 @@ Why the seven bus tags are InOut and not Output: an Output is copied from the in
 | `o_xClear` | Output, W | `"DB_RobotJob".Push.xClear` |
 | `o_udtState` | Output, W | `"DB_RobotJob".State` |
 
-**`FB_ScanDrumJob`, `IDB_ScanDrumJob`, OB1 after the cube job** (folder): the nine Inputs of the cube job, plus `i_rZ`, `i_rRadius`, `i_rStartAngle`, `i_rRotZOffset`, `i_xClockwise` (Input, R) from `"DB_Recipe".Drum.*`, `i_xFromHere`, `i_udtActual`, `i_xActualValid` (Input, R, v0.2), `i_xPathMode` (Input, R, v0.4, part 7) from `"DB_Recipe".xPathMode`, and one Output `o_udtOut` (W) to `"DB_RobotJob".Drum`.
+**`FB_ScanDrumJob`, `IDB_ScanDrumJob`, OB1 after the cube job** (folder): the nine Inputs of the cube job, plus `i_rZ`, `i_rRadius`, `i_rStartAngle`, `i_rRotZOffset`, `i_xClockwise` (Input, R) from `"DB_Recipe".Drum.*`, `i_xFromHere`, `i_udtActual`, `i_xActualValid` (Input, R, v0.2), `i_xPathMode` (Input, R, v0.4, part 7) from `"DB_Recipe".xPathMode`, `i_xNoTurn` (Input, R, v0.5, 2026-11-06) from `"DB_Recipe".xNoTurn`, and one Output `o_udtOut` (W) to `"DB_RobotJob".Drum`.
+
+**`FB_ScanLineJob`, `IDB_ScanLineJob`, OB1 after the drum job** (folder, 2026-11-09): the nine Inputs of the cube job, plus `i_rLength`, `i_rPitch`, `i_intCount`, `i_rLeadIn`, `i_rAngle`, `i_rZ`, `i_rFaceZ`, `i_rRotZOffset`, `i_xZigzag`, `i_xIndexAlong`, `i_xLiftBetween`, `i_rLiftZ` (Input, R) from `"DB_Recipe".Line.*`, `i_xFromHere`, `i_udtActual`, `i_xActualValid`, `i_xNoTurn` (Input, R), and three Outputs (W): `o_udtOut` to `"DB_RobotJob".Line`, `o_xScanWindow` to `"DB_RobotJob".xScanWindow`, `o_intLineActive` to `"DB_RobotJob".intLineActive`. `FC_JobMux` v0.2 gets `i_udtLine` (Input, R) from `"DB_RobotJob".Line` at the end of its inputs.
 
 ### A7. How one cycle runs in automatic (checked against the code)
 
@@ -288,6 +294,9 @@ W and RW both count as "writer". A tag may have many R.
 | `DB_Poses.rSafeZ` | the Poses screen | HMI | |
 | `DB_Recipe.Cube.*`, `.Drum.*`, `.xFromHere` | the Automatic screen | HMI | from step 1b |
 | `DB_Recipe.xPathMode` | the Automatic screen | HMI | from part 7, the path mode switch |
+| `DB_Recipe.Line.*` | the Automatic screen, the LINE box | HMI | v0.4, 2026-11-09 |
+| `DB_RobotJob.Line`, `.xScanWindow`, `.intLineActive`, `.intLineCount` (v0.3) | `FB_ScanLineJob` | Output, W | OB1, the line job network, 2026-11-09. `FC_JobMux` v0.2 reads `.Line` |
+| `DB_RobotMove.Cfg.rMinSpeed` | the Robot move screen, M43 | HMI | v0.3 (2026-11-09), read by `FB_RobotMove` v0.8 |
 | `DB_RobotPath.aoudtP`, `.aorBlend` (whole arrays) | `FB_RobotMove` v0.6 | InOut, RW | OB1 NW12, from part 7. Read by the OB30 NW2 segment pins. `DB_App.Path.Seg[n].X … R2`, `.Blend` then have no writer and no reader |
 
 If a tag of this table ever gets a second W or RW, that is the bug.
@@ -365,8 +374,10 @@ The rows marked **folder** in A2 to A6, in one list. Nothing of this runs tomorr
 | `FB_ScanCubeJob` v0.5, the cube by its dimensions and "scan from here", six new pins (plus `i_xPathMode`, inert until part 7) | `FB_ScanCubeJob.scl` | step 1b, 2026-11-02 |
 | `DB_RobotJob.Man.intJob`, `.Cube`, `.Drum`, `.intJobActive` | `DB_RobotJob.scl` | part 6, import 3 |
 | `FC_RobotAlarms` job error 5 → bit 9 | `FC_RobotAlarms.scl` | part 6, import 4 |
-| `FB_ScanDrumJob` v0.4 + `IDB_ScanDrumJob`, with "scan from here" (plus `i_xPathMode`, inert until part 7) | `FB_ScanDrumJob.scl` | part 6, import 5 |
-| `FC_JobMux` | `FC_JobMux.scl` | part 6, import 6 |
+| `FB_ScanDrumJob` v0.6 + `IDB_ScanDrumJob`, with "scan from here" (plus `i_xPathMode`, the one-run circle, inert while the switch is off, and `i_xNoTurn`, 2026-11-06) | `FB_ScanDrumJob.scl` | part 6, import 5 |
+| `FC_JobMux` v0.2 (the third input `i_udtLine`, 2026-11-09) | `FC_JobMux.scl` | part 6, import 6; v0.2 with the line job |
+| **the line scan, job 3** (2026-11-09): `FB_ScanLineJob` v0.1 + `IDB_ScanLineJob`, `DB_Recipe` v0.4 (struct `Line`), `DB_RobotJob` v0.2 (`Line`, `xScanWindow`, `intLineActive`), `FC_RobotAlarms` v0.2 (job error 9 → bit 17), pose 9, the OB1 network and the mux pin, the LINE box A59 … A74 | `FB_ScanLineJob.scl`, `DB_Recipe.scl`, `DB_RobotJob.scl`, `FC_RobotAlarms.scl`, `OB1_Stage2_call.scl` | `TEST/CHECKLIST_LINE_AUTO.md`, after the drum tests |
+| **the whole table** (2026-11-09, the same day): `UDT_LineGeo` v0.1, `FC_LineMove` v0.1, `FB_ScanLineJob` v0.2 (no list, AREA by pose 9 and 10, `i_xArea`, `o_intLineCount`), `DB_Recipe` v0.5 (`Line.xArea`), `DB_RobotJob` v0.3 (`intLineCount`), `DB_RobotMove` v0.3 (`Cfg.rMinSpeed`), `FB_RobotMove` v0.8 (`i_rMinSpeed`), the two pins on the line job box and one on the engine box, A75 … A77, M43 | `UDT_LineGeo.udt`, `FC_LineMove.scl`, `FB_ScanLineJob.scl`, `DB_Recipe.scl`, `DB_RobotJob.scl`, `DB_RobotMove.scl`, `FB_RobotMove.scl`, `OB1_Stage2_call.scl` | `TEST/CHECKLIST_LINE_AUTO.md` A2 rows 4 … 9, A3 row 3, E9, E10 |
 | OB1: cube job gated by `intJob = 1` and outputs to `Cube`, drum network, mux network | `OB1_Stage2_call.scl` | part 6, step 17 |
 | program 20 blocks 3 and 4, `Cfg.intBlocksInPrg20` = 4, Circle license | `PROGRAM20.md` | part 6, step 18 |
 | `FB_RobotMode` + `IDB_RobotMode`, the robot mode by the PLC | `FB_RobotMode.scl`, `OB1_Stage2_call.scl` | step 1a of `AUTOMATIC_TODAY.md`, 2026-11-02 |

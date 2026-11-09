@@ -248,6 +248,8 @@ Two things break the smooth cycle and are in the findings: switching AUTO or edi
 
 ## 6. The review
 
+**Note of 2026-11-09.** The blocks in `PLC/` are now your line: engine v0.7 of 2026-11-06 (blocks 6 and 7 get the path time) and v0.8 (time limit grows with the way), cube job v0.6, select v0.2, cube buttons v0.1. The v0.7 of 2026-11-05 that sections 6 and 7 call "applied" is not in that line; it lives in git history (commit cdcbac6). None of its changes are in v0.8: step 0 still writes nothing, the settle still counts from the entry of step 20, the run number is not compared with the echo, step 10 still reads the live request, blocks 5..7 without a path still pass, there is no step 95. Read "v0.7" in the status column as "proposed, in cdcbac6"; the findings themselves stand against v0.8 as they did against v0.6.
+
 Six readings of the code (engine, cycle timing, one writer, bus contract, cube job, error diagnosis) gave 43 findings, merged to 29. The adversarial pass (three refuters per group) was started twice and killed twice by restarts of the review machine; one refuter finished, the code lens over findings 1, 2, 3, 4 and 15, and refuted none of them. The column "checked by" says how far each finding was verified: **refuter** = code re-read line by line by an independent reader who tried to refute it; **readers** = found by one or more of the six readings and re-read by me against the files; **machine** = cannot be decided from the files, the watch of section 8 decides.
 
 Status on 2026-11-05: **v0.7** = removed by the change set of section 7; **open** = not changed, with the reason; **doc** = a document row, no code.

@@ -198,8 +198,8 @@ REGION network 3 - module 2, slot 19, hw 272, robot words 65..128, fb v0.7
                               WrBool3 := "DB_App".Srl.Gate[3],   // bool[53] block 3 circle ccw, one quarter
                               WrBool4 := "DB_App".Srl.Gate[4],   // bool[54] block 4 circle cw, one quarter
                               WrBool5 := "DB_App".Srl.Gate[5],   // bool[55] block 5 rectangle, 7 lin on pose[1..7]
-                              WrBool6 := "DB_App".Srl.Gate[6],   // bool[56] block 6 circle ccw, 4 arcs on pose[1..4]
-                              WrBool7 := "DB_App".Srl.Gate[7],   // bool[57] block 7 circle cw, 4 arcs
+                              WrBool6 := "DB_App".Srl.Gate[6],   // bool[56] block 6 circle ccw, one run: center in pose[51], 360 in real[52] (2026-11-06)
+                              WrBool7 := "DB_App".Srl.Gate[7],   // bool[57] block 7 circle cw, one run
                               WrBool8 := "DB_App".Srl.Gate[8],   // bool[58] free
 
                               // ---- the setpoint reals 51..54 -----------------
