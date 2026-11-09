@@ -1,0 +1,202 @@
+FUNCTION_BLOCK "FB_MachineReady"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.2
+// machine ready: switches the robot on in steps and tells the screen the first thing that is missing.
+// your block (MachineReady.docx, 2026-11-05), taken into the folder as it is, with three small fixes.
+// every changed line carries the date. the call pins are at the end of this file and in
+// OB1_Stage2_call.scl.
+//
+// the sequence: 0 off -> 10 wait for comm and sto -> 20 reset a fault -> 30 wait for the drives
+// -> 40 wait for automatic -> 90 on. 99 = stopped on error, OnReq off and on again to retry.
+// ReadyToStart is the checklist of nine, independent of the sequence. OB30 NW2 ands it into the start.
+//
+// v0.2 (2026-11-05):
+//   1. no timeout in state 30. the Enable output is not wired (OB1 NW8 writes Cmd.Enable from the
+//      screen switch), so 30 waits for the operator, and waiting for an operator is not a fault.
+//      before: enable off for 8 s = error 30, machine off/on to retry.
+//   2. state 90 steps back to 30 when the drives lose power (enable off), the way it steps back to
+//      10 when comm drops. before: MachineReady stayed TRUE with the drives off.
+//   3. new input ResetReq at the end: the screen's reset button comes in here, and this block is
+//      the one writer of Cmd.Reset. before: the screen wrote Cmd.Reset and the Reset output
+//      overwrote it every cycle, so the button worked only by luck.
+//   nothing else changed. the Automatic output stays open: FB_RobotMode writes Cmd.Automatic.
+//
+// two rungs under the call in OB1 are not part of this block and must go (seen 2026-11-05):
+//   "DB_App".MachineOn AND "DB_RobotMove".Man.xStart  --( )--  "DB_App".Cmd.Start
+//        the second writer of Cmd.Start. the engine writes it through io_xStart. with this rung
+//        the engine's start survives one OB1 cycle or none, depending on the network order, and
+//        a MOVE button held long enough starts the robot outside the engine. checklist row 2.9.
+//   "DB_RobotHand".xAutomatic_from_Screen AND NOT "IDB_RobotMode".xManualWanted
+//        AND NOT "DB_RobotHand".xHandModeJust  --( )--  "DB_App".Cmd.Automatic
+//        a second writer of Cmd.Automatic, and a screen switch that leaves the robot in manual
+//        when it is off (engine error 5 at every move). FB_RobotMode gets
+//        io_xAutomatic := "DB_App".Cmd.Automatic and this rung goes.
+   VAR_INPUT
+      OnReq : Bool;              // "DB_App".MachineOn, the machine-on request from the screen
+      CommAlive : Bool;          // "DB_App".HS_Alive, module 1 handshake moving
+      StoReleased : Bool;        // "DB_MOVIKIT_Robotics-5AX".safe_stop, true = sto not active, as wired and proven
+      RobotError : Bool;         // "DB_MOVIKIT_Robotics-5AX".error
+      Powered : Bool;            // "DB_MOVIKIT_Robotics-5AX".powered, output stages enabled
+      AutoActive : Bool;         // "DB_Robot".Status.xAutomatic, pi 2.0
+      Referenced : Bool;         // "DB_MOVIKIT_Robotics-5AX".referenced
+      Override : Int;            // "DB_App".Cmd.Override
+      ProgNo : Int;              // "DB_App".Cmd.ProgramNumber
+      ResetReq : Bool;           // v0.2: "DB_RobotHand".Btn.xResetRobot, the screen's reset button, momentary
+   END_VAR
+
+   VAR_OUTPUT
+      Enable : Bool;             // open. OB1 NW8 writes Cmd.Enable
+      Reset : Bool;              // => "DB_App".Cmd.Reset, the one writer since v0.2
+      Automatic : Bool;          // open. FB_RobotMode writes Cmd.Automatic
+      Ready : Bool;              // => "DB_App".MachineReady, true in state 90
+      ReadyToStart : Bool;       // => "DB_App".ReadyToStart, the checklist of nine. OB30 NW2 start pin
+      MissingNo : Int;           // => "DB_App".MissingNo, the first thing missing, 0 = nothing
+      MissingText : String[32];  // => "DB_App".MissingText
+      State : Int;               // => "DB_App".ReadyState
+      ErrorCode : Int;           // => "DB_App".ReadyError. 20 or 40 = timeout in that state, 90 = fault while on
+   END_VAR
+
+   VAR
+      PrevState : Int;
+      tTimeout : TON_TIME;
+   END_VAR
+
+   VAR CONSTANT
+      T_WAIT : Time := T#8s;     // a reset must clear the fault, automatic must come, within this
+   END_VAR
+
+BEGIN
+   IF NOT #OnReq THEN
+      #State := 0;
+   END_IF;
+
+   #Reset := FALSE;              // v0.2: default every cycle. state 20 and ResetReq set it
+
+   CASE #State OF
+      0: // off
+         #Enable := FALSE;
+         #Automatic := FALSE;
+         #Ready := FALSE;
+         #ErrorCode := 0;
+         IF #OnReq THEN
+            #State := 10;
+         END_IF;
+
+      10: // preconditions the plc cannot make by itself
+         IF #CommAlive AND #StoReleased THEN
+            IF #RobotError THEN
+               #State := 20;
+            ELSE
+               #State := 30;
+            END_IF;
+         END_IF;
+
+      20: // hold reset until the error is gone
+         #Reset := TRUE;
+         IF NOT #RobotError THEN
+            #Reset := FALSE;
+            #State := 30;
+         END_IF;
+
+      30: // the drives. the enable is the operator's switch through NW8: no timeout here (v0.2)
+         #Enable := TRUE;
+         IF #Powered THEN
+            #State := 40;
+         END_IF;
+
+      40: // automatic. FB_RobotMode gives it at rest, so it comes by itself
+         #Automatic := TRUE;
+         IF #AutoActive THEN
+            #State := 90;
+         END_IF;
+
+      90: // on. keep watching
+         #Ready := TRUE;
+         IF (NOT #StoReleased) OR #RobotError THEN
+            #ErrorCode := 90;              // hard fault: off, retry by button
+            #State := 99;
+         ELSIF NOT #CommAlive THEN
+            #Ready := FALSE;               // monitor took access, or the link dropped:
+            #Enable := FALSE;              // step back, wait in 10, come back by itself
+            #Automatic := FALSE;
+            #State := 10;
+         ELSIF NOT #Powered THEN           // v0.2: enable off, the drives are without power. not a fault:
+            #Ready := FALSE;               // wait in 30, come back by itself when the enable returns
+            #State := 30;
+         END_IF;
+
+      99: // stopped on error. OnReq off -> on to retry
+         #Enable := FALSE;
+         #Automatic := FALSE;
+         #Ready := FALSE;
+   END_CASE;
+
+   // v0.2: the screen's reset button goes out through this block, in every state
+   IF #ResetReq THEN
+      #Reset := TRUE;
+   END_IF;
+
+   // one timeout for the states that wait for the robot, not for the operator (v0.2: 30 left out).
+   // restarts on every state change
+   #tTimeout(IN := (#State = #PrevState) AND ((#State = 20) OR (#State = 40)), PT := #T_WAIT);
+   IF #tTimeout.Q THEN
+      #ErrorCode := #State;
+      #State := 99;
+   END_IF;
+   #PrevState := #State;
+
+   // part 2: the checklist, always the first thing missing
+   IF NOT #OnReq THEN
+      #MissingNo := 1;
+      #MissingText := 'SWITCH MACHINE ON';
+   ELSIF NOT #CommAlive THEN
+      #MissingNo := 2;
+      #MissingText := 'NO COMMUNICATION';
+   ELSIF NOT #StoReleased THEN
+      #MissingNo := 3;
+      #MissingText := 'SAFETY NOT RELEASED';
+   ELSIF #RobotError THEN
+      #MissingNo := 4;
+      #MissingText := 'ROBOT ERROR';
+   ELSIF NOT #Powered THEN
+      #MissingNo := 5;
+      #MissingText := 'NOT POWERED';
+   ELSIF NOT #AutoActive THEN
+      #MissingNo := 6;
+      #MissingText := 'NOT IN AUTOMATIC';
+   ELSIF #Override <= 0 THEN
+      #MissingNo := 7;
+      #MissingText := 'OVERRIDE IS 0';
+   ELSIF (#ProgNo < 1) OR (#ProgNo > 20) THEN
+      #MissingNo := 8;
+      #MissingText := 'PROGRAM NO INVALID';
+   ELSIF NOT #Referenced THEN
+      #MissingNo := 9;
+      #MissingText := 'AXES NOT REFERENCED';
+   ELSE
+      #MissingNo := 0;
+      #MissingText := 'READY TO START';
+   END_IF;
+   #ReadyToStart := (#MissingNo = 0);
+
+   // the call, ob1, your network before the robot mode network (as in your project):
+   //   "DB_MachineReady"(OnReq       := "DB_App".MachineOn,
+   //                     CommAlive   := "DB_App".HS_Alive,
+   //                     StoReleased := "DB_MOVIKIT_Robotics-5AX".safe_stop,
+   //                     RobotError  := "DB_MOVIKIT_Robotics-5AX".error,
+   //                     Powered     := "DB_MOVIKIT_Robotics-5AX".powered,
+   //                     AutoActive  := "DB_Robot".Status.xAutomatic,
+   //                     Referenced  := "DB_MOVIKIT_Robotics-5AX".referenced,
+   //                     Override    := "DB_App".Cmd.Override,
+   //                     ProgNo      := "DB_App".Cmd.ProgramNumber,
+   //                     ResetReq    := "DB_RobotHand".Btn.xResetRobot,          // v0.2, new
+   //                     Enable      => open,                                     // NW8 writes Cmd.Enable
+   //                     Reset       => "DB_App".Cmd.Reset,
+   //                     Automatic   => open,                                     // FB_RobotMode writes Cmd.Automatic
+   //                     Ready       => "DB_App".MachineReady,
+   //                     ReadyToStart => "DB_App".ReadyToStart,
+   //                     MissingNo   => "DB_App".MissingNo,
+   //                     MissingText => "DB_App".MissingText,
+   //                     State       => "DB_App".ReadyState,
+   //                     ErrorCode   => "DB_App".ReadyError);
+END_FUNCTION_BLOCK

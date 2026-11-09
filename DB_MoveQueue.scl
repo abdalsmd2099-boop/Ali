@@ -1,0 +1,18 @@
+DATA_BLOCK "DB_MoveQueue"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// the move queue between a job and the move engine. one writer: fb_movequeue.
+// readers: fc_moveselect (Head, xHeadValid), the job (intCount, xFull), hmi.
+NON_RETAIN
+   VAR
+      Q : "UDT_MoveQueue";          // the fifo itself
+      Head : "UDT_MoveReq";         // copy of the oldest entry
+      xHeadValid : Bool;            // true when the queue is not empty
+      intCount : Int;
+      xFull : Bool;
+      xPushRefused : Bool;          // one cycle: a push hit a full queue, nothing stored
+   END_VAR
+
+BEGIN
+
+END_DATA_BLOCK

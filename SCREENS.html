@@ -1,0 +1,685 @@
+<title>Gantry Robot Screens</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* layout: one column of sections, each screen as a grey device panel with numbered objects, tables beneath, ladder rungs at the end */
+:root{
+  --bg:#f2f4f7; --fg:#1a1f27; --muted:#5c6572; --line:#cdd3dc; --card:#ffffff;
+  --accent:#0b6e99; --accent-soft:#e3f0f7; --warn:#a65a00; --warn-soft:#fbf0dc; --ok:#1f7a3a;
+  --hmi-bg:#dde1e6; --hmi-fg:#161a20; --hmi-field:#ffffff; --hmi-out:#eceff2; --hmi-border:#98a2ae;
+  --hmi-mom:#1d5fa6; --hmi-mom-fg:#ffffff; --hmi-on:#28a745; --hmi-off:#a2aab3; --hmi-group:#cbd1d8; --hmi-title:#2b3340;
+  --font:"Barlow",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#141820; --fg:#e6e9ee; --muted:#9aa4b2; --line:#2c3440; --card:#1b212b;
+  --accent:#55b4de; --accent-soft:#17303d; --warn:#e3a84f; --warn-soft:#3a2d14; --ok:#5fc57d; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#141820; --fg:#e6e9ee; --muted:#9aa4b2; --line:#2c3440; --card:#1b212b;
+  --accent:#55b4de; --accent-soft:#17303d; --warn:#e3a84f; --warn-soft:#3a2d14; --ok:#5fc57d; color-scheme:dark }
+
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding-block:24px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:30px;font-weight:700;letter-spacing:-.01em;margin:0 0 4px;text-wrap:balance}
+h2{font-size:22px;font-weight:700;margin:40px 0 6px;padding-top:12px;border-top:2px solid var(--line);text-wrap:balance}
+h3{font-size:16px;font-weight:600;margin:22px 0 6px}
+p{margin:6px 0;max-width:72ch}
+.lede{color:var(--muted)}
+.kicker{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}
+nav.toc a{font-size:13px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:4px 12px;background:var(--card)}
+nav.toc a:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code,.mono{font-family:var(--mono);font-size:.92em}
+.legend{display:flex;flex-wrap:wrap;gap:10px 18px;margin:12px 0 0;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+td.num{font-variant-numeric:tabular-nums}
+.tbl{overflow-x:auto;margin:8px 0 0}
+.tbl table{min-width:640px}
+.note{border-left:3px solid var(--warn);background:var(--warn-soft);padding:8px 12px;margin:12px 0;max-width:80ch}
+.note.blue{border-left-color:var(--accent);background:var(--accent-soft)}
+.pos{margin-top:8px}
+.pos td b{font-weight:600}
+.on{color:var(--ok);font-weight:600}
+.off{color:var(--muted);font-weight:600}
+
+/* the device panel. fixed colors on purpose: it is a picture of the screen, the same in both themes */
+.hmi{background:var(--hmi-bg);color:var(--hmi-fg);border:1px solid var(--hmi-border);border-radius:6px;padding:12px;margin:12px 0 0;font-size:13px}
+.hmi-title{font-weight:700;font-size:14px;color:var(--hmi-title);letter-spacing:.02em;margin:0 0 10px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.hmi-title small{font-weight:500;color:var(--hmi-title);opacity:.75}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.cols{grid-template-columns:1fr}}
+.grp{background:var(--hmi-group);border:1px solid var(--hmi-border);border-radius:4px;padding:8px;min-width:0}
+.grp-t{font-weight:700;font-size:11px;letter-spacing:.08em;color:var(--hmi-title);margin:0 0 8px}
+.objs{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+.obj{display:flex;flex-direction:column;gap:3px;min-width:0}
+.obj .top{display:flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px}
+.n{font-family:var(--mono);font-size:10px;font-weight:500;background:var(--hmi-title);color:var(--hmi-bg);border-radius:3px;padding:0 4px;line-height:16px}
+.io,.out{display:inline-flex;align-items:center;justify-content:flex-end;gap:4px;height:26px;padding:0 8px;border:1px solid var(--hmi-border);font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums;max-width:100%}
+.io{background:var(--hmi-field);color:var(--hmi-fg)}
+.out{background:var(--hmi-out);color:var(--hmi-fg);border-style:dashed}
+.io .u,.out .u{font-family:var(--font);font-size:11px;opacity:.7}
+.sw{display:inline-flex;align-items:center;gap:6px;height:26px}
+.sw i{display:inline-block;width:34px;height:18px;border-radius:9px;background:var(--hmi-off);position:relative;border:1px solid var(--hmi-border)}
+.sw i::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--hmi-field)}
+.sw.on i{background:var(--hmi-on)}.sw.on i::after{left:18px}
+.btn,.mom{display:inline-flex;align-items:center;justify-content:center;height:28px;padding:0 12px;border-radius:3px;border:1px solid var(--hmi-border);font-weight:700;font-size:12px;letter-spacing:.03em}
+.btn{background:var(--hmi-field);color:var(--hmi-fg)}
+.mom{background:var(--hmi-mom);color:var(--hmi-mom-fg);border-color:var(--hmi-mom)}
+.lamp{display:inline-flex;align-items:center;gap:6px;height:26px;font-size:12.5px}
+.lamp i{width:12px;height:12px;border-radius:50%;background:var(--hmi-off);border:1px solid var(--hmi-border);display:inline-block}
+.lamp.on i{background:var(--hmi-on)}
+.tag{font-family:var(--mono);font-size:10.5px;color:var(--hmi-title);word-break:break-all;line-height:1.3}
+.tag.sub{opacity:.8}
+.hint{font-size:11px;color:var(--hmi-title);opacity:.8}
+.ptbl{overflow-x:auto;margin:0 0 8px}
+.ptbl table{min-width:560px;font-size:12px;background:var(--hmi-group);color:var(--hmi-fg)}
+.ptbl th{color:var(--hmi-title);border-bottom:1px solid var(--hmi-border)}
+.ptbl td{border-bottom:1px solid var(--hmi-border);padding:3px 6px}
+.ptbl .io,.ptbl .out{height:22px;font-size:12px;padding:0 6px}
+.ptbl .lamp{height:22px}
+.alarm{border:1px dashed var(--hmi-border);background:var(--hmi-out);padding:8px;margin-top:10px;font-size:12px;color:var(--hmi-title)}
+
+/* ladder */
+.ladder{overflow-x:auto;margin:6px 0 4px;padding:6px 0}
+svg.lad{display:block;height:auto;max-width:none;color:var(--fg)}
+svg.lad line,svg.lad path,svg.lad rect{stroke:currentColor;stroke-width:1.6;fill:none;stroke-linecap:round}
+svg.lad .rail{stroke-width:3}
+svg.lad text{font-family:var(--mono);fill:currentColor;text-anchor:middle;font-size:11px}
+svg.lad .l1{font-size:10.5px;opacity:.75}
+svg.lad .l2{font-size:11.5px;font-weight:500}
+svg.lad .l3{font-size:10px;opacity:.75}
+svg.lad .pm{font-weight:700;font-size:12px}
+svg.lad .bt{font-weight:700;font-size:13px;font-family:var(--font)}
+svg.lad .pin{font-size:10px;text-anchor:start;font-family:var(--font)}
+svg.lad .pin.r{text-anchor:end}
+svg.lad .r{text-anchor:end}
+svg.lad .coil{color:var(--accent)}
+svg.lad .coil text{font-weight:600}
+.rung{margin:18px 0 0}
+.rung .series{font-size:13.5px;color:var(--muted);max-width:none}
+pre{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px 14px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.45;margin:8px 0}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:10px 0}
+.fact{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}
+.fact b{display:block;font-size:13px;margin-bottom:2px}
+.fact span{font-size:13px;color:var(--muted)}
+.lists{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:8px}
+.lists table{font-size:13px}
+.lists caption{text-align:left;font-weight:600;padding:0 0 4px;font-family:var(--mono);font-size:12.5px}
+.foot{margin-top:40px;padding-top:12px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+  <div class="kicker">2026-11-01, updated 2026-11-09 · the screens for teaching, the cube scan, the drum scan and the line scan · WinCC Unified, S7-1511F, MOVIKIT Robotics</div>
+  <h1>Gantry Robot Screens</h1>
+  <p class="lede">The three screens with every object, its kind and its PLC tag. Each object carries a number that is repeated in the table under the screen. At the end, the ladder for jog X and home X, the pattern for the other four axes. Updated 2026-11-04: the CUBE box with its buttons on <code>"DB_RobotHand".Btn</code>, the teach objects of the POSES box on the same DB, ACK and the mode lamps in the JOB box, step 15 and error 15 in the lists. The build order, box by box: <code>CHECKLIST_CUBE_AUTO.md</code> section 8. Updated 2026-11-06: the DRUM box A53 … A57, the job selector A51, A52 and the drum move text A58 in the JOB box, the radius M41 on the Robot move screen, the lists TL_Job and TL_MoveDrum. The drum, step by step: <code>CHECKLIST_DRUM_AUTO.md</code>. Updated 2026-11-09: the LINE box A59 … A71 (the line scan, job 3: serpentine, raster, patch), A72 … A74 in the JOB box, pose row 9, the list TL_MoveLine, TL_Job 3, TL_JobErr 9. The line scan, step by step: <code>CHECKLIST_LINE_AUTO.md</code>.</p>
+  <nav class="toc">
+    <a href="#tomorrow">Switch positions</a>
+    <a href="#manual">1 Robot move</a>
+    <a href="#auto">2 Automatic</a>
+    <a href="#old">3 Old robot screen</a>
+    <a href="#lists">4 Text lists</a>
+    <a href="#ladder">5 Ladder: jog X, home X</a>
+  </nav>
+  <div class="legend">
+    <span><span class="io" style="height:20px;font-size:11px">1000</span> I/O field, the operator types</span>
+    <span><span class="out" style="height:20px;font-size:11px">1000</span> output field, read only</span>
+    <span><span class="lamp on"><i></i></span> lamp</span>
+    <span><span class="sw on" style="height:20px"><i></i></span> switch, stays</span>
+    <span><span class="mom" style="height:20px;font-size:10px">MOVE</span> momentary button, press 1 release 0</span>
+  </div>
+
+  <h2 id="tomorrow">Switch positions for every step of tomorrow</h2>
+  <p>Three switches decide what works. Two are ours, one belongs to the robot. The robot can jog and reference only in its manual mode, and it runs a program from the PLC only in its automatic mode (manual 6.1.1). From step 1a on, <code>FB_RobotMode</code> in OB1 sets the robot's mode by itself: automatic is the rest state, manual while a jog or home button is held and nothing of ours moves, automatic again half a second after the button is released and the robot stands still. Until that block is in the PLC, the old screen's automatic switch does it by hand: off for jogging, on for every move.</p>
+  <div class="tbl pos"><table>
+    <thead><tr><th>Doing</th><th>Enable <span class="mono">Man.xEnable</span></th><th>AUTO <span class="mono">Man.xAuto</span></th><th>Robot automatic <span class="mono">Cmd.Automatic</span></th><th>Simulation <span class="mono">Cmd.Simulation</span></th></tr></thead>
+    <tbody>
+      <tr><td><b>jog, home an axis</b></td><td class="on">ON</td><td class="off">OFF</td><td class="off">manual, the PLC while the button is held</td><td class="off">OFF</td></tr>
+      <tr><td><b>TEACH a pose</b></td><td class="on">ON</td><td class="off">OFF</td><td>any</td><td class="off">OFF</td></tr>
+      <tr><td><b>GO TO START, GO TO CORNER 1</b></td><td class="on">ON</td><td class="off">OFF</td><td class="on">automatic, the PLC</td><td class="off">OFF</td></tr>
+      <tr><td><b>MOVE, one pose by hand</b></td><td class="on">ON</td><td class="off">OFF</td><td class="on">automatic, the PLC</td><td class="off">OFF</td></tr>
+      <tr><td><b>scan in simulation, step 10</b></td><td class="on">ON</td><td class="on">ON</td><td class="on">automatic, the PLC</td><td class="on">ON</td></tr>
+      <tr><td><b>real scan, step 13</b></td><td class="on">ON</td><td class="on">ON</td><td class="on">automatic, the PLC</td><td class="off">OFF</td></tr>
+    </tbody>
+  </table></div>
+  <p class="lede">A button in the wrong position does nothing, that is wanted. MOVE with the robot in manual gives engine error 5. A jog button with the robot in automatic does nothing. A MOVE inside the half second after a jog gives engine error 5 too: RESET, MOVE again. Pause and stop on the old screen stay off all day.</p>
+
+  <!-- ============================================================ 1 MANUAL -->
+  <h2 id="manual">1. Screen "Robot move" – manual</h2>
+  <p class="lede">Stage 1, proven on the machine. Single moves by hand. All tags in <code>DB_RobotMove</code> and <code>DB_Robot</code>. Nothing on this screen writes <code>DB_App</code>.</p>
+
+  <div class="hmi">
+    <div class="hmi-title"><span>Robot move</span><small>M1 … M42</small></div>
+    <div class="cols">
+      <div class="grp"><div class="grp-t">TARGET</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">M1</span>X</span><span class="io">1000 <span class="u">mm</span></span><span class="tag">"DB_RobotMove".Man.udtReq.udtPose.rX</span><span class="hint">0 … 4380</span></div>
+          <div class="obj"><span class="top"><span class="n">M2</span>Y</span><span class="io">1000 <span class="u">mm</span></span><span class="tag">"DB_RobotMove".Man.udtReq.udtPose.rY</span><span class="hint">0 … 4230</span></div>
+          <div class="obj"><span class="top"><span class="n">M3</span>Z</span><span class="io">500 <span class="u">mm</span></span><span class="tag">"DB_RobotMove".Man.udtReq.udtPose.rZ</span><span class="hint">−10 … 1908</span></div>
+          <div class="obj"><span class="top"><span class="n">M4</span>RotZ</span><span class="io">0 <span class="u">deg</span></span><span class="tag">"DB_RobotMove".Man.udtReq.udtPose.rRotZ</span><span class="hint">−180 … 180</span></div>
+          <div class="obj"><span class="top"><span class="n">M5</span>RotY</span><span class="io">0 <span class="u">deg</span></span><span class="tag">"DB_RobotMove".Man.udtReq.udtPose.rRotY</span><span class="hint">−10 … 10</span></div>
+          <div class="obj"><span class="top"><span class="n">M6</span>Override</span><span class="io">10 <span class="u">%</span></span><span class="tag">"DB_RobotMove".Man.udtReq.intOverride</span><span class="hint">1 … 100, start 10</span></div>
+          <div class="obj"><span class="top"><span class="n">M7</span>Block</span><span class="io">1 <span class="u">linear</span></span><span class="tag">"DB_RobotMove".Man.udtReq.intBlock</span><span class="hint">1 … 8, text list TL_Block</span></div>
+          <div class="obj"><span class="top"><span class="n">M41</span>Radius</span><span class="io">0 <span class="u">mm</span></span><span class="tag">"DB_RobotMove".Man.udtReq.aorPar[1]</span><span class="hint">0 … 5000, blocks 3, 4, 6, 7. The hand test of the circle</span></div>
+          <div class="obj"><span class="top"><span class="n">M42</span>Angle</span><span class="io">0 <span class="u">deg</span></span><span class="tag">"DB_RobotMove".Man.udtReq.aorPar[2]</span><span class="hint">0 … 360, blocks 6 and 7: the full circle by hand, 360. The target field is then the center (2026-11-06)</span></div>
+          <div class="obj"><span class="top"><span class="n">M8</span>Enable</span><span class="sw on"><i></i>on</span><span class="tag">"DB_RobotMove".Man.xEnable</span><span class="hint">switch, on all day</span></div>
+          <div class="obj"><span class="top"><span class="n">M9</span>MOVE</span><span class="mom">MOVE</span><span class="tag">"DB_RobotMove".Man.xStart</span><span class="hint">momentary</span></div>
+          <div class="obj"><span class="top"><span class="n">M10</span>RESET</span><span class="mom">RESET</span><span class="tag">"DB_RobotMove".Man.xReset</span><span class="hint">momentary, clears the engine error</span></div>
+        </div>
+      </div>
+      <div class="grp"><div class="grp-t">ROBOT</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">M11</span>ready</span><span class="lamp on"><i></i></span><span class="tag">"DB_Robot".Status.xReady</span></div>
+          <div class="obj"><span class="top"><span class="n">M12</span>referenced</span><span class="lamp on"><i></i></span><span class="tag">"DB_Robot".Status.xReferenced</span></div>
+          <div class="obj"><span class="top"><span class="n">M13</span>automatic</span><span class="lamp on"><i></i></span><span class="tag">"DB_Robot".Status.xAutomatic</span></div>
+          <div class="obj"><span class="top"><span class="n">M14</span>access</span><span class="lamp on"><i></i></span><span class="tag">"DB_Robot".Status.xAccessGranted</span></div>
+          <div class="obj"><span class="top"><span class="n">M15</span>fault</span><span class="lamp"><i></i></span><span class="tag">"DB_Robot".Status.xFault</span></div>
+          <div class="obj"><span class="top"><span class="n">M16</span>comm ok</span><span class="lamp on"><i></i></span><span class="tag">"DB_Robot".Status.xCommOK</span></div>
+          <div class="obj"><span class="top"><span class="n">M17</span>moving</span><span class="lamp"><i></i></span><span class="tag">"DB_Robot".Status.xMoving</span></div>
+          <div class="obj"><span class="top"><span class="n">M18</span>running</span><span class="lamp"><i></i></span><span class="tag">"DB_Robot".Status.xPrgRunning</span></div>
+          <div class="obj"><span class="top"><span class="n">M19</span>finished</span><span class="lamp on"><i></i></span><span class="tag">"DB_Robot".Status.xPrgFinished</span></div>
+          <div class="obj"><span class="top"><span class="n">M20</span>message id</span><span class="out">0</span><span class="tag">"DB_Robot".Status.uiMsgId</span></div>
+          <div class="obj"><span class="top"><span class="n">M21</span>actual X</span><span class="out">1000</span><span class="tag">"DB_Robot".Status.udtPoseBcs.rX</span></div>
+          <div class="obj"><span class="top"><span class="n">M22</span>actual Y</span><span class="out">1000</span><span class="tag">"DB_Robot".Status.udtPoseBcs.rY</span></div>
+          <div class="obj"><span class="top"><span class="n">M23</span>actual Z</span><span class="out">500</span><span class="tag">"DB_Robot".Status.udtPoseBcs.rZ</span></div>
+          <div class="obj"><span class="top"><span class="n">M24</span>actual RotZ</span><span class="out">0</span><span class="tag">"DB_Robot".Status.udtPoseBcs.rRotZ</span></div>
+          <div class="obj"><span class="top"><span class="n">M25</span>actual RotY</span><span class="out">0</span><span class="tag">"DB_Robot".Status.udtPoseBcs.rRotY</span></div>
+          <div class="obj"><span class="top"><span class="n">M26</span>remaining segments</span><span class="out">0</span><span class="tag">"DB_Robot".Status.intRemainingSeg</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="grp" style="margin-top:12px"><div class="grp-t">MOVE STATE</div>
+      <div class="objs">
+        <div class="obj"><span class="top"><span class="n">M27</span>busy</span><span class="lamp"><i></i></span><span class="tag">"DB_RobotMove".State.xBusy</span></div>
+        <div class="obj"><span class="top"><span class="n">M28</span>done</span><span class="lamp on"><i></i></span><span class="tag">"DB_RobotMove".State.xDone</span><span class="hint">one cycle, may not be visible</span></div>
+        <div class="obj"><span class="top"><span class="n">M29</span>error</span><span class="lamp"><i></i></span><span class="tag">"DB_RobotMove".State.xError</span></div>
+        <div class="obj"><span class="top"><span class="n">M30</span>step</span><span class="out">0 <span class="u">idle</span></span><span class="tag">"DB_RobotMove".State.intStep</span><span class="hint">text list TL_Step</span></div>
+        <div class="obj"><span class="top"><span class="n">M31</span>error nr</span><span class="out">0 <span class="u">no error</span></span><span class="tag">"DB_RobotMove".State.intErrId</span><span class="hint">text list TL_Err</span></div>
+        <div class="obj"><span class="top"><span class="n">M32</span>run nr</span><span class="out">12</span><span class="tag">"DB_RobotMove".State.intRunNr</span></div>
+        <div class="obj"><span class="top"><span class="n">M33</span>block</span><span class="out">1</span><span class="tag">"DB_RobotMove".State.intBlockActive</span></div>
+        <div class="obj"><span class="top"><span class="n">M34</span>pose at end X</span><span class="out">1000</span><span class="tag">"DB_RobotMove".State.udtPoseAtEnd.rX</span></div>
+        <div class="obj"><span class="top"><span class="n">M35</span>pose at end Y</span><span class="out">1000</span><span class="tag">"DB_RobotMove".State.udtPoseAtEnd.rY</span></div>
+        <div class="obj"><span class="top"><span class="n">M36</span>pose at end Z</span><span class="out">500</span><span class="tag">"DB_RobotMove".State.udtPoseAtEnd.rZ</span></div>
+        <div class="obj"><span class="top"><span class="n">M37</span>pose at end RotZ</span><span class="out">0</span><span class="tag">"DB_RobotMove".State.udtPoseAtEnd.rRotZ</span></div>
+        <div class="obj"><span class="top"><span class="n">M38</span>pose at end RotY</span><span class="out">0</span><span class="tag">"DB_RobotMove".State.udtPoseAtEnd.rRotY</span></div>
+        <div class="obj"><span class="top"><span class="n">M39</span>message at error</span><span class="out">0</span><span class="tag">"DB_RobotMove".State.uiMsgIdAtError</span></div>
+        <div class="obj"><span class="top"><span class="n">M40</span>blocks in program 20</span><span class="io">1</span><span class="tag">"DB_RobotMove".Cfg.intBlocksInPrg20</span><span class="hint">admin only, retain</span></div>
+        <div class="obj"><span class="top"><span class="n">M43</span>min speed</span><span class="io">0 <span class="u">mm/s</span></span><span class="tag">"DB_RobotMove".Cfg.rMinSpeed</span><span class="hint">admin only, retain. The engine allows 60 s (300 s path / circle) plus the way of the move divided by this. 0 = the fixed limits. 10 for the long lines (2026-11-09, engine v0.8)</span></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Every object of the Robot move screen</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Nr</th><th>Object</th><th>Kind</th><th>Tag</th><th>Settings</th></tr></thead>
+    <tbody>
+      <tr><td class="num">M1–M5</td><td>target X, Y, Z, RotZ, RotY</td><td>I/O field, Real</td><td class="mono">"DB_RobotMove".Man.udtReq.udtPose.rX … .rRotY</td><td>0 decimals. HMI limits X 0…4380, Y 0…4230, Z −10…1908, RotZ −180…180, RotY −10…10, the same numbers as FC_PoseCheck</td></tr>
+      <tr><td class="num">M6</td><td>override</td><td>I/O field, Int</td><td class="mono">"DB_RobotMove".Man.udtReq.intOverride</td><td>1…100, start value 10</td></tr>
+      <tr><td class="num">M7</td><td>block</td><td>I/O field, Int</td><td class="mono">"DB_RobotMove".Man.udtReq.intBlock</td><td>1…8, text list TL_Block, start value 1</td></tr>
+      <tr><td class="num">M8</td><td>Enable</td><td>switch</td><td class="mono">"DB_RobotMove".Man.xEnable</td><td>on = hand and auto moves allowed. One of the requester branches of OB1 network 8</td></tr>
+      <tr><td class="num">M9</td><td>MOVE</td><td>momentary button</td><td class="mono">"DB_RobotMove".Man.xStart</td><td>Press → SetTagValue 1, Release → SetTagValue 0. The engine takes the edge. Dead while AUTO is on</td></tr>
+      <tr><td class="num">M10</td><td>RESET</td><td>momentary button</td><td class="mono">"DB_RobotMove".Man.xReset</td><td>same. Works only in engine step 90</td></tr>
+      <tr><td class="num">M11–M19</td><td>robot lamps</td><td>lamp</td><td class="mono">"DB_Robot".Status.xReady, .xReferenced, .xAutomatic, .xAccessGranted, .xFault, .xCommOK, .xMoving, .xPrgRunning, .xPrgFinished</td><td>read only</td></tr>
+      <tr><td class="num">M20</td><td>message id</td><td>output field, UInt</td><td class="mono">"DB_Robot".Status.uiMsgId</td><td>fault when M15, warning when the robot warns</td></tr>
+      <tr><td class="num">M21–M25</td><td>actual pose</td><td>output field, Real</td><td class="mono">"DB_Robot".Status.udtPoseBcs.rX … .rRotY</td><td>whole mm / deg from the bus</td></tr>
+      <tr><td class="num">M26</td><td>remaining segments</td><td>output field, Int</td><td class="mono">"DB_Robot".Status.intRemainingSeg</td><td></td></tr>
+      <tr><td class="num">M27–M29</td><td>busy, done, error</td><td>lamp</td><td class="mono">"DB_RobotMove".State.xBusy, .xDone, .xError</td><td>done is a one-cycle pulse</td></tr>
+      <tr><td class="num">M30</td><td>step</td><td>output field, Int</td><td class="mono">"DB_RobotMove".State.intStep</td><td>text list TL_Step</td></tr>
+      <tr><td class="num">M31</td><td>error</td><td>output field, Int</td><td class="mono">"DB_RobotMove".State.intErrId</td><td>text list TL_Err</td></tr>
+      <tr><td class="num">M32, M33</td><td>run nr, block</td><td>output field, Int</td><td class="mono">"DB_RobotMove".State.intRunNr, .intBlockActive</td><td></td></tr>
+      <tr><td class="num">M34–M38</td><td>pose at end</td><td>output field, Real</td><td class="mono">"DB_RobotMove".State.udtPoseAtEnd.rX … .rRotY</td><td></td></tr>
+      <tr><td class="num">M39</td><td>message at error</td><td>output field, UInt</td><td class="mono">"DB_RobotMove".State.uiMsgIdAtError</td><td></td></tr>
+      <tr><td class="num">M40</td><td>blocks in program 20</td><td>I/O field, Int</td><td class="mono">"DB_RobotMove".Cfg.intBlocksInPrg20</td><td>admin user level. 1 or 2 tomorrow, 4 after the drum</td></tr>
+      <tr><td class="num">M43</td><td>min speed</td><td>I/O field, Real</td><td class="mono">"DB_RobotMove".Cfg.rMinSpeed</td><td>admin user level, mm/s, 0…1000 (2026-11-09, engine v0.8). The time limit of a move = 60 s (300 s for a path or a circle) + the way of the move / this speed. 0 = the fixed limits as before. 10 is safe for the long lines of the line scan. A download of DB_RobotMove sets it back to 0</td></tr>
+      <tr><td class="num">M41</td><td>radius</td><td>I/O field, Real</td><td class="mono">"DB_RobotMove".Man.udtReq.aorPar[1]</td><td>0…5000, 0 decimals, next to M7. Blocks 3, 4, 6 and 7 refuse 0 with engine error 4. The hand test of the circle, CHECKLIST_DRUM_AUTO.md E1</td></tr>
+      <tr><td class="num">M42</td><td>angle</td><td>I/O field, Real</td><td class="mono">"DB_RobotMove".Man.udtReq.aorPar[2]</td><td>0…360, 0 decimals, next to M41. Blocks 6 and 7 (the circle in one run, 2026-11-06): the target field holds the center, this field the angle, 360 for the full circle. The hand test CHECKLIST_DRUM_AUTO.md F4.1</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ============================================================ 2 AUTOMATIC -->
+  <h2 id="auto">2. Screen "Automatic" – teaching and the scan</h2>
+  <p class="lede">Stage 2. One screen, three framed groups, called boxes: <b>POSES</b> (the rows and the teach of any row), <b>CUBE</b> (the three numbers, the three teach buttons, the two go-to buttons, the switches) and <b>JOB</b> (AUTO, override, START, ABORT, ACK, the state), plus the engine and robot fields repeated from screen 1. A box is only a frame on the screen that groups objects; the cube is the thing the robot scans. All tags in <code>DB_Poses</code>, <code>DB_Recipe</code>, <code>DB_RobotHand</code>, <code>DB_RobotJob</code>, <code>DB_MoveQueue</code>, <code>DB_RobotMove</code>, <code>DB_Robot</code>. The Enable switch of screen 1 is shown here too, the same tag. Every button is one bit, press 1 release 0; <code>FB_CubeButtons</code> in OB1 does the rest, no scripts.</p>
+
+  <div class="hmi">
+    <div class="hmi-title"><span>Automatic</span><small>A1 … A77</small></div>
+    <div class="cols">
+      <div class="grp"><div class="grp-t">POSES</div>
+        <div class="ptbl"><table>
+          <thead><tr><th>nr</th><th>name</th><th>valid</th><th>X</th><th>Y</th><th>Z</th><th>RotZ</th><th>RotY</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>home</td><td><span class="lamp on"><i></i></span></td><td><span class="io">200</span></td><td><span class="io">200</span></td><td><span class="io">1500</span></td><td><span class="io">0</span></td><td><span class="io">0</span></td></tr>
+            <tr><td>2</td><td>start</td><td><span class="lamp on"><i></i></span></td><td><span class="io">1500</span></td><td><span class="io">1500</span></td><td><span class="io">1500</span></td><td><span class="io">0</span></td><td><span class="io">0</span></td></tr>
+            <tr><td>3</td><td>approach</td><td><span class="lamp on"><i></i></span></td><td><span class="io">1300</span></td><td><span class="io">1300</span></td><td><span class="io">1200</span></td><td><span class="io">0</span></td><td><span class="io">0</span></td></tr>
+            <tr><td>4</td><td>corner 1</td><td><span class="lamp on"><i></i></span></td><td><span class="io">1200</span></td><td><span class="io">1200</span></td><td><span class="io">900</span></td><td><span class="io">0</span></td><td><span class="io">0</span></td></tr>
+            <tr><td>5</td><td>corner 2</td><td><span class="lamp on"><i></i></span></td><td><span class="io">1800</span></td><td><span class="io">1200</span></td><td><span class="io">900</span></td><td><span class="io">90</span></td><td><span class="io">0</span></td></tr>
+            <tr><td>6</td><td>corner 3</td><td><span class="lamp on"><i></i></span></td><td><span class="io">1800</span></td><td><span class="io">1800</span></td><td><span class="io">900</span></td><td><span class="io">180</span></td><td><span class="io">0</span></td></tr>
+            <tr><td>7</td><td>corner 4</td><td><span class="lamp on"><i></i></span></td><td><span class="io">1200</span></td><td><span class="io">1800</span></td><td><span class="io">900</span></td><td><span class="io">−90</span></td><td><span class="io">0</span></td></tr>
+            <tr><td>8</td><td>drum center</td><td><span class="lamp"><i></i></span></td><td><span class="io">0</span></td><td><span class="io">0</span></td><td><span class="io">0</span></td><td><span class="io">0</span></td><td><span class="io">0</span></td></tr>
+            <tr><td>9</td><td>line start</td><td><span class="lamp"><i></i></span></td><td><span class="io">0</span></td><td><span class="io">0</span></td><td><span class="io">0</span></td><td><span class="io">0</span></td><td><span class="io">0</span></td></tr>
+            <tr><td>10</td><td>line corner 2</td><td><span class="lamp"><i></i></span></td><td><span class="io">0</span></td><td><span class="io">0</span></td><td><span class="io">0</span></td><td><span class="io">0</span></td><td><span class="io">0</span></td></tr>
+          </tbody>
+        </table></div>
+        <div class="obj" style="margin-bottom:8px"><span class="top"><span class="n">A1</span>row n</span><span class="tag">valid: "DB_Poses".aoxValid[n]</span><span class="tag">X … RotY: "DB_Poses".aoudtP[n].rX, .rY, .rZ, .rRotZ, .rRotY</span><span class="hint">the numbers above are examples, not your poses. Row 8 is the drum center, lamp A57. Row 9 is the start of line 0 of the line scan, lamp A71 (2026-11-09). Row 10 is corner 2 of the area with AREA on, lamp A76</span></div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A2</span>safe Z</span><span class="io">1500 <span class="u">mm</span></span><span class="tag">"DB_Poses".rSafeZ</span><span class="hint">−10 … 1908, the Z of pose 2</span></div>
+          <div class="obj"><span class="top"><span class="n">A3</span>pose nr</span><span class="io">2</span><span class="tag">"DB_RobotHand".Btn.intPoseNr</span><span class="hint">1 … 50. Since 2026-11-03 here, not on "DB_RobotJob".Teach.intPoseNr</span></div>
+          <div class="obj"><span class="top"><span class="n">A4</span>TEACH</span><span class="mom">TEACH actual pose</span><span class="tag">"DB_RobotHand".Btn.xTeachNr</span><span class="hint">momentary. FB_CubeButtons hands it to the teach block</span></div>
+          <div class="obj"><span class="top"><span class="n">A5</span>CLEAR</span><span class="mom">CLEAR</span><span class="tag">"DB_RobotHand".Btn.xClearNr</span><span class="hint">momentary, valid off, numbers stay</span></div>
+          <div class="obj"><span class="top"><span class="n">A6</span>taught</span><span class="lamp on"><i></i></span><span class="tag">"DB_RobotJob".Teach.xTaught</span><span class="hint">one cycle</span></div>
+          <div class="obj"><span class="top"><span class="n">A7</span>refused</span><span class="lamp"><i></i></span><span class="tag">"DB_RobotJob".Teach.xRefused</span><span class="hint">one cycle</span></div>
+          <div class="obj"><span class="top"><span class="n">A8</span>last taught</span><span class="out">2</span><span class="tag">"DB_RobotJob".Teach.intLastTaught</span></div>
+          <div class="obj"><span class="top"><span class="n">A9</span>actual pose</span><span class="out">1500 · 1500 · 1500 · 0 · 0</span><span class="tag">"DB_Robot".Status.udtPoseBcs.rX … .rRotY</span><span class="hint">five output fields</span></div>
+          <div class="obj"><span class="top"><span class="n">A10</span>COPY to target</span><span class="btn">COPY pose nr → target</span><span class="tag">script: reads "DB_Poses".aoudtP[n].* writes "DB_RobotMove".Man.udtReq.udtPose.*</span><span class="hint">optional</span></div>
+        </div>
+        <div class="grp-t" style="margin-top:12px">CUBE</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A35</span>length</span><span class="io">600 <span class="u">mm</span></span><span class="tag">"DB_Recipe".Cube.rLength</span><span class="hint">side 1 from corner 1, 0 … 4380. 0 = the taught rows 5 to 7</span></div>
+          <div class="obj"><span class="top"><span class="n">A36</span>width</span><span class="io">400 <span class="u">mm</span></span><span class="tag">"DB_Recipe".Cube.rWidth</span><span class="hint">side 2, 0 … 4230</span></div>
+          <div class="obj"><span class="top"><span class="n">A37</span>angle</span><span class="io">0 <span class="u">deg</span></span><span class="tag">"DB_Recipe".Cube.rAngle</span><span class="hint">direction of side 1, 0 = +X, −180 … 180</span></div>
+          <div class="obj"><span class="top"><span class="n">A45</span>corners text</span><span class="out">computed from corner 1</span><span class="tag">visibility: "DB_RobotHand".Lamp.xComputed</span><span class="hint">two texts on one spot: 1 "computed from corner 1", 0 "taught, rows 5 to 7"</span></div>
+          <div class="obj"><span class="top"><span class="n">A39</span>TEACH HOME</span><span class="mom">TEACH HOME</span><span class="tag">"DB_RobotHand".Btn.xTeachHome</span><span class="tag">lamp: "DB_Poses".aoxValid[1]</span><span class="hint">momentary. Enabled by A46</span></div>
+          <div class="obj"><span class="top"><span class="n">A40</span>TEACH START</span><span class="mom">TEACH START</span><span class="tag">"DB_RobotHand".Btn.xTeachStart</span><span class="tag">lamp: "DB_Poses".aoxValid[2]</span><span class="hint">momentary</span></div>
+          <div class="obj"><span class="top"><span class="n">A41</span>TEACH CORNER 1</span><span class="mom">TEACH CORNER 1</span><span class="tag">"DB_RobotHand".Btn.xTeachC1</span><span class="tag">lamp: "DB_Poses".aoxValid[4]</span><span class="hint">momentary. Tool at the corner, facing side 1, RotZ −180</span></div>
+          <div class="obj"><span class="top"><span class="n">A42</span>ready</span><span class="lamp on"><i></i></span><span class="tag">"DB_RobotHand".Lamp.xCubeReady</span><span class="hint">home, start and corner 1 taught</span></div>
+          <div class="obj"><span class="top"><span class="n">A43</span>GO TO START</span><span class="mom">GO TO START</span><span class="tag">"DB_RobotHand".Btn.xGoStart</span><span class="hint">momentary. Row 2 into the target, block 1, one start. Enabled by A46</span></div>
+          <div class="obj"><span class="top"><span class="n">A44</span>GO TO CORNER 1</span><span class="mom">GO TO CORNER 1</span><span class="tag">"DB_RobotHand".Btn.xGoC1</span><span class="hint">momentary. Row 4</span></div>
+          <div class="obj"><span class="top"><span class="n">A46</span>teach allowed · go allowed</span><span class="lamp on"><i></i> <i></i></span><span class="tag">"DB_RobotHand".Lamp.xTeachAllowed, .xGoAllowed</span><span class="hint">the enable of the five buttons: Enable on, AUTO off, engine idle</span></div>
+          <div class="obj"><span class="top"><span class="n">A38</span>SCAN FROM HERE</span><span class="sw"><i></i>off</span><span class="tag">"DB_Recipe".xFromHere</span><span class="hint">on: START takes the actual pose as corner 1, or as the drum center. Retentive</span></div>
+          <div class="obj"><span class="top"><span class="n">A49</span>PATH MODE</span><span class="sw"><i></i>off</span><span class="tag">"DB_Recipe".xPathMode</span><span class="hint">only with part 7. Off = one move per point</span></div>
+          <div class="obj"><span class="top"><span class="n">A50</span>NO TURN</span><span class="sw"><i></i>off</span><span class="tag">"DB_Recipe".xNoTurn</span><span class="hint">both jobs. Cube v0.6: the tool keeps the orientation of corner 1, no turn moves, 10 moves instead of 14. Drum v0.5 (2026-11-06): the tool keeps the RotZ of pose 8 on the whole circle. Retentive</span></div>
+        </div>
+        <div class="grp-t" style="margin-top:12px">DRUM</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A53</span>scan height</span><span class="io">900 <span class="u">mm</span></span><span class="tag">"DB_Recipe".Drum.rZ</span><span class="hint">−10 … 1908, the Z of the circle</span></div>
+          <div class="obj"><span class="top"><span class="n">A54</span>radius</span><span class="io">450 <span class="u">mm</span></span><span class="tag">"DB_Recipe".Drum.rRadius</span><span class="hint">drum radius + sensor distance, 0 … 3000. 0 = job error 5</span></div>
+          <div class="obj"><span class="top"><span class="n">A55</span>RotZ offset</span><span class="io">0 <span class="u">deg</span></span><span class="tag">"DB_Recipe".Drum.rRotZOffset</span><span class="hint">−180 … 180. 0 for the first test. The tool's RotZ when it looks along +X</span></div>
+          <div class="obj"><span class="top"><span class="n">A56</span>CLOCKWISE</span><span class="sw"><i></i>off</span><span class="tag">"DB_Recipe".Drum.xClockwise</span><span class="hint">off = block 3 ccw, on = block 4 cw. Retentive</span></div>
+          <div class="obj"><span class="top"><span class="n">A57</span>center taught</span><span class="lamp"><i></i></span><span class="tag">"DB_Poses".aoxValid[8]</span><span class="hint">teach: pose nr 8 in A3, TEACH A4, the tool above the drum axis</span></div>
+        </div>
+        <div class="grp-t" style="margin-top:12px">LINE · serpentine, raster, patch, area (2026-11-09)</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A59</span>length</span><span class="io">300 <span class="u">mm</span></span><span class="tag">"DB_Recipe".Line.rLength</span><span class="hint">0 … 4000. The patch, the scanned part of every line. 0 = job error 5</span></div>
+          <div class="obj"><span class="top"><span class="n">A60</span>pitch</span><span class="io">100 <span class="u">mm</span></span><span class="tag">"DB_Recipe".Line.rPitch</span><span class="hint">−4000 … 4000, start to start. + = the next line to the left of the line direction, − = to the right. 0 = job error 5</span></div>
+          <div class="obj"><span class="top"><span class="n">A61</span>lines</span><span class="io">3</span><span class="tag">"DB_Recipe".Line.intCount</span><span class="hint">1 … 5000. Not used with AREA on, A77 shows the computed number</span></div>
+          <div class="obj"><span class="top"><span class="n">A62</span>lead-in</span><span class="io">50 <span class="u">mm</span></span><span class="tag">"DB_Recipe".Line.rLeadIn</span><span class="hint">0 … 500. The line begins this much before the patch and ends this much after it</span></div>
+          <div class="obj"><span class="top"><span class="n">A63</span>angle</span><span class="io">0 <span class="u">deg</span></span><span class="tag">"DB_Recipe".Line.rAngle</span><span class="hint">−180 … 180, direction of the lines. 0 = +X, 90 = +Y</span></div>
+          <div class="obj"><span class="top"><span class="n">A64</span>scan height</span><span class="io">600 <span class="u">mm</span></span><span class="tag">"DB_Recipe".Line.rZ</span><span class="hint">−10 … 1908</span></div>
+          <div class="obj"><span class="top"><span class="n">A65</span>face Z</span><span class="io">0 <span class="u">mm</span></span><span class="tag">"DB_Recipe".Line.rFaceZ</span><span class="hint">0 = not checked. Smaller Z is up: scan height at or below it = job error 9</span></div>
+          <div class="obj"><span class="top"><span class="n">A66</span>RotZ offset</span><span class="io">0 <span class="u">deg</span></span><span class="tag">"DB_Recipe".Line.rRotZOffset</span><span class="hint">−180 … 180, as A55. Only with NO TURN off</span></div>
+          <div class="obj"><span class="top"><span class="n">A67</span>ZIGZAG</span><span class="sw on"><i></i>on</span><span class="tag">"DB_Recipe".Line.xZigzag</span><span class="hint">on = serpentine, every odd line backwards. Off = raster, the move back is the long diagonal. Retentive</span></div>
+          <div class="obj"><span class="top"><span class="n">A68</span>INDEX ALONG</span><span class="sw"><i></i>off</span><span class="tag">"DB_Recipe".Line.xIndexAlong</span><span class="hint">on = the next line further along the same line, the patch scan (pitch &gt; length + 2 × lead-in). Retentive</span></div>
+          <div class="obj"><span class="top"><span class="n">A69</span>LIFT BETWEEN</span><span class="sw"><i></i>off</span><span class="tag">"DB_Recipe".Line.xLiftBetween</span><span class="hint">on = lift, travel, down between two lines. Retentive</span></div>
+          <div class="obj"><span class="top"><span class="n">A70</span>lift Z</span><span class="io">0 <span class="u">mm</span></span><span class="tag">"DB_Recipe".Line.rLiftZ</span><span class="hint">the height of the travel with LIFT BETWEEN. 0 = safe Z</span></div>
+          <div class="obj"><span class="top"><span class="n">A71</span>start taught</span><span class="lamp"><i></i></span><span class="tag">"DB_Poses".aoxValid[9]</span><span class="hint">teach: pose nr 9 in A3, TEACH A4, the tool at the first point to scan, any height. Or SCAN FROM HERE there. With AREA: corner 1</span></div>
+          <div class="obj"><span class="top"><span class="n">A75</span>AREA</span><span class="sw"><i></i>off</span><span class="tag">"DB_Recipe".Line.xArea</span><span class="hint">on = the area by two corners, pose 9 and pose 10: length and lines are computed, the lines walk toward corner 2. Off = the numbers A59, A61. Retentive (v0.2)</span></div>
+          <div class="obj"><span class="top"><span class="n">A76</span>corner 2 taught</span><span class="lamp"><i></i></span><span class="tag">"DB_Poses".aoxValid[10]</span><span class="hint">teach: pose nr 10 in A3, TEACH A4, the tool over the opposite corner of the area, any height. Only with AREA</span></div>
+          <div class="obj"><span class="top"><span class="n">A77</span>lines of the job</span><span class="out">0</span><span class="tag">"DB_RobotJob".intLineCount</span><span class="hint">what the last START built: A61 as typed, or the computed number with AREA</span></div>
+        </div>
+      </div>
+      <div class="grp"><div class="grp-t">JOB · switches and buttons</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A11</span>Enable</span><span class="sw on"><i></i>on</span><span class="tag">"DB_RobotMove".Man.xEnable</span><span class="hint">same switch as M8</span></div>
+          <div class="obj"><span class="top"><span class="n">A12</span>AUTO</span><span class="sw"><i></i>off</span><span class="tag">"DB_RobotJob".Man.xAuto</span><span class="hint">switch. On = the queue drives, MOVE is dead. Off while running = abort</span></div>
+          <div class="obj"><span class="top"><span class="n">A13</span>override</span><span class="io">10 <span class="u">%</span></span><span class="tag">"DB_RobotJob".Man.intOverride</span><span class="hint">1 … 100, start 10</span></div>
+          <div class="obj"><span class="top"><span class="n">A14</span>START</span><span class="mom">START</span><span class="tag">"DB_RobotJob".Man.xStart</span><span class="hint">momentary</span></div>
+          <div class="obj"><span class="top"><span class="n">A15</span>ABORT</span><span class="mom">ABORT</span><span class="tag">"DB_RobotJob".Man.xAbort</span><span class="hint">momentary, also clears a job error</span></div>
+          <div class="obj"><span class="top"><span class="n">A16</span>queue waiting</span><span class="out">0</span><span class="tag">"DB_MoveQueue".intCount</span></div>
+          <div class="obj"><span class="top"><span class="n">A17</span>queue full</span><span class="lamp"><i></i></span><span class="tag">"DB_MoveQueue".xFull</span></div>
+          <div class="obj"><span class="top"><span class="n">A47</span>ACK</span><span class="mom">ACK</span><span class="tag">"DB_RobotHand".Btn.xAck</span><span class="hint">momentary. Engine reset and job abort together, one button</span></div>
+          <div class="obj"><span class="top"><span class="n">A48</span>robot mode</span><span class="lamp on"><i></i> automatic <i></i> manual</span><span class="tag">"DB_Robot".Status.xAutomatic, NOT the same</span><span class="hint">two lamps, no switch. FB_RobotMode sets the mode</span></div>
+          <div class="obj"><span class="top"><span class="n">A51</span>job</span><span class="io">1 <span class="u">scan cube</span></span><span class="tag">"DB_RobotJob".Man.intJob</span><span class="hint">1 cube, 2 drum, 3 line (2026-11-09), text list TL_Job. Or three buttons CUBE / DRUM / LINE</span></div>
+          <div class="obj"><span class="top"><span class="n">A52</span>active job</span><span class="out">1 <span class="u">scan cube</span></span><span class="tag">"DB_RobotJob".intJobActive</span><span class="hint">TL_Job. Follows A51 when no job runs. This is what START runs</span></div>
+        </div>
+        <div class="grp-t" style="margin-top:12px">JOB</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A18</span>running</span><span class="lamp"><i></i></span><span class="tag">"DB_RobotJob".State.xRunning</span></div>
+          <div class="obj"><span class="top"><span class="n">A19</span>done</span><span class="lamp"><i></i></span><span class="tag">"DB_RobotJob".State.xDone</span><span class="hint">one cycle</span></div>
+          <div class="obj"><span class="top"><span class="n">A20</span>error</span><span class="lamp"><i></i></span><span class="tag">"DB_RobotJob".State.xError</span></div>
+          <div class="obj"><span class="top"><span class="n">A21</span>job error</span><span class="out">0 <span class="u">no error</span></span><span class="tag">"DB_RobotJob".State.intErrId</span><span class="hint">text list TL_JobErr</span></div>
+          <div class="obj"><span class="top"><span class="n">A22</span>job step</span><span class="out">0 <span class="u">idle</span></span><span class="tag">"DB_RobotJob".State.intStep</span><span class="hint">text list TL_JobStep</span></div>
+          <div class="obj"><span class="top"><span class="n">A23</span>moves done</span><span class="out">0</span><span class="tag">"DB_RobotJob".State.intMovesDone</span></div>
+          <div class="obj"><span class="top"><span class="n">A24</span>moves total</span><span class="out">14</span><span class="tag">"DB_RobotJob".State.intMovesTotal</span></div>
+          <div class="obj"><span class="top"><span class="n">A25</span>active</span><span class="out">0 <span class="u">–</span></span><span class="tag">"DB_RobotJob".State.intMoveActive</span><span class="hint">text list TL_Move. Visible while A52 = 1</span></div>
+          <div class="obj"><span class="top"><span class="n">A58</span>active, drum</span><span class="out">0 <span class="u">–</span></span><span class="tag">"DB_RobotJob".State.intMoveActive</span><span class="hint">the same tag, text list TL_MoveDrum. Visible while A52 = 2</span></div>
+          <div class="obj"><span class="top"><span class="n">A72</span>active, line</span><span class="out">0 <span class="u">–</span></span><span class="tag">"DB_RobotJob".State.intMoveActive</span><span class="hint">the same tag, text list TL_MoveLine. Visible while A52 = 3 (2026-11-09)</span></div>
+          <div class="obj"><span class="top"><span class="n">A73</span>line</span><span class="out">0</span><span class="tag">"DB_RobotJob".intLineActive</span><span class="hint">the line k of the active move, 0 … lines − 1. At job error 4 the bad line</span></div>
+          <div class="obj"><span class="top"><span class="n">A74</span>scan window</span><span class="lamp"><i></i></span><span class="tag">"DB_RobotJob".xScanWindow</span><span class="hint">on while the tool is inside a patch during a line move. The bit for the sensor</span></div>
+          <div class="obj"><span class="top"><span class="n">A26</span>engine error</span><span class="out">0 <span class="u">no error</span></span><span class="tag">"DB_RobotJob".State.intEngineErr</span><span class="hint">text list TL_Err</span></div>
+        </div>
+        <div class="grp-t" style="margin-top:12px">MOVE ENGINE · same tags as M27 … M33</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A27</span>busy · done · error</span><span class="lamp"><i></i> <i></i> <i></i></span><span class="tag">"DB_RobotMove".State.xBusy, .xDone, .xError</span></div>
+          <div class="obj"><span class="top"><span class="n">A28</span>step</span><span class="out">0 <span class="u">idle</span></span><span class="tag">"DB_RobotMove".State.intStep</span><span class="hint">TL_Step</span></div>
+          <div class="obj"><span class="top"><span class="n">A29</span>error nr</span><span class="out">0</span><span class="tag">"DB_RobotMove".State.intErrId</span><span class="hint">TL_Err</span></div>
+          <div class="obj"><span class="top"><span class="n">A30</span>run nr · block</span><span class="out">12 · 1</span><span class="tag">"DB_RobotMove".State.intRunNr, .intBlockActive</span></div>
+        </div>
+        <div class="grp-t" style="margin-top:12px">ROBOT · same tags as M11 … M25</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A31</span>lamps</span><span class="lamp on"><i></i> ready <i></i> ref <i></i> auto <i></i> access</span><span class="tag">"DB_Robot".Status.xReady, .xReferenced, .xAutomatic, .xAccessGranted, .xFault, .xCommOK, .xMoving</span></div>
+          <div class="obj"><span class="top"><span class="n">A32</span>actual pose</span><span class="out">1500 · 1500 · 1500 · 0 · 0</span><span class="tag">"DB_Robot".Status.udtPoseBcs.rX … .rRotY</span></div>
+          <div class="obj"><span class="top"><span class="n">A33</span>message id</span><span class="out">0</span><span class="tag">"DB_Robot".Status.uiMsgId</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="alarm"><span class="n">A34</span> ALARMS – alarm view on the discrete alarms of <span class="tag" style="display:inline">"DB_RobotJob".aoxAlarm[1..32]</span>. Bits 1–22 engine, 23–27 job, 28–32 robot, texts in HMI_STAGE2.md section 4. Planned after the cube runs, not needed tomorrow.</div>
+  </div>
+
+  <h3>Every object of the Automatic screen</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Nr</th><th>Object</th><th>Kind</th><th>Tag</th><th>Settings</th></tr></thead>
+    <tbody>
+      <tr><td class="num">A1</td><td>pose rows 1…10, valid</td><td>lamp</td><td class="mono">"DB_Poses".aoxValid[n]</td><td>true = taught or typed, may be used</td></tr>
+      <tr><td class="num">A1</td><td>pose rows 1…10, X … RotY</td><td>I/O field, Real</td><td class="mono">"DB_Poses".aoudtP[n].rX, .rY, .rZ, .rRotZ, .rRotY</td><td>0 decimals, the limits of M1–M5. Typing is allowed, teaching is better. Names: 1 home, 2 start, 3 approach, 4–7 corner 1–4, 8 drum center (later), 9–10 free</td></tr>
+      <tr><td class="num">A2</td><td>safe Z</td><td>I/O field, Real</td><td class="mono">"DB_Poses".rSafeZ</td><td>−10…1908. Must be above the cube. Step 8: the Z of pose 2</td></tr>
+      <tr><td class="num">A3</td><td>pose nr</td><td>I/O field, Int</td><td class="mono">"DB_RobotHand".Btn.intPoseNr</td><td>1…50, start value 1. Since 2026-11-03 on this tag, FB_CubeButtons is the writer of "DB_RobotJob".Teach.intPoseNr</td></tr>
+      <tr><td class="num">A4</td><td>TEACH actual pose</td><td>momentary button</td><td class="mono">"DB_RobotHand".Btn.xTeachNr</td><td>teaches row A3. Refused when AUTO on, engine busy, not referenced, comm not ok, nr outside 1…50</td></tr>
+      <tr><td class="num">A5</td><td>CLEAR</td><td>momentary button</td><td class="mono">"DB_RobotHand".Btn.xClearNr</td><td>valid lamp of row A3 off, numbers stay</td></tr>
+      <tr><td class="num">A6, A7</td><td>taught, refused</td><td>lamp</td><td class="mono">"DB_RobotJob".Teach.xTaught, .xRefused</td><td>one-cycle pulses, may only flash</td></tr>
+      <tr><td class="num">A8</td><td>last taught</td><td>output field, Int</td><td class="mono">"DB_RobotJob".Teach.intLastTaught</td><td></td></tr>
+      <tr><td class="num">A9</td><td>actual pose</td><td>output field, Real ×5</td><td class="mono">"DB_Robot".Status.udtPoseBcs.rX … .rRotY</td><td>what TEACH stores</td></tr>
+      <tr><td class="num">A10</td><td>COPY pose nr to target</td><td>button with script</td><td class="mono">reads "DB_Poses".aoudtP[n].*, writes "DB_RobotMove".Man.udtReq.udtPose.*</td><td>optional. Then MOVE on screen 1 goes there. Step 9 can also be done by typing the five numbers</td></tr>
+      <tr><td class="num">A11</td><td>Enable</td><td>switch</td><td class="mono">"DB_RobotMove".Man.xEnable</td><td>the same tag as M8, shown twice on purpose</td></tr>
+      <tr><td class="num">A12</td><td>AUTO</td><td>switch</td><td class="mono">"DB_RobotJob".Man.xAuto</td><td>on = automatic, START and ABORT work, MOVE and TEACH are dead. Off while a job runs = abort after the running move</td></tr>
+      <tr><td class="num">A13</td><td>override</td><td>I/O field, Int</td><td class="mono">"DB_RobotJob".Man.intOverride</td><td>1…100, start value 10. Every move of the job</td></tr>
+      <tr><td class="num">A14</td><td>START</td><td>momentary button</td><td class="mono">"DB_RobotJob".Man.xStart</td><td>edge inside the job block</td></tr>
+      <tr><td class="num">A15</td><td>ABORT</td><td>momentary button</td><td class="mono">"DB_RobotJob".Man.xAbort</td><td>the running move finishes, the queue is emptied. Also clears a job error</td></tr>
+      <tr><td class="num">A16, A17</td><td>queue waiting, full</td><td>output field, lamp</td><td class="mono">"DB_MoveQueue".intCount, .xFull</td><td>13 → 0 during a scan, 14 with home</td></tr>
+      <tr><td class="num">A18–A20</td><td>running, done, error</td><td>lamp</td><td class="mono">"DB_RobotJob".State.xRunning, .xDone, .xError</td><td></td></tr>
+      <tr><td class="num">A21</td><td>job error</td><td>output field, Int</td><td class="mono">"DB_RobotJob".State.intErrId</td><td>text list TL_JobErr</td></tr>
+      <tr><td class="num">A22</td><td>job step</td><td>output field, Int</td><td class="mono">"DB_RobotJob".State.intStep</td><td>text list TL_JobStep</td></tr>
+      <tr><td class="num">A23, A24</td><td>moves done, total</td><td>output field, Int</td><td class="mono">"DB_RobotJob".State.intMovesDone, .intMovesTotal</td><td></td></tr>
+      <tr><td class="num">A25</td><td>active</td><td>output field, Int</td><td class="mono">"DB_RobotJob".State.intMoveActive</td><td>text list TL_Move. At job error 4 it is the bad pose of the list</td></tr>
+      <tr><td class="num">A26</td><td>engine error</td><td>output field, Int</td><td class="mono">"DB_RobotJob".State.intEngineErr</td><td>text list TL_Err, filled at job error 10</td></tr>
+      <tr><td class="num">A27–A30</td><td>move engine</td><td>lamps, output fields</td><td class="mono">"DB_RobotMove".State.xBusy, .xDone, .xError, .intStep, .intErrId, .intRunNr, .intBlockActive</td><td>the same as M27–M33</td></tr>
+      <tr><td class="num">A31–A33</td><td>robot</td><td>lamps, output fields</td><td class="mono">"DB_Robot".Status.* as M11–M25</td><td></td></tr>
+      <tr><td class="num">A34</td><td>alarm view</td><td>alarm view</td><td class="mono">"DB_RobotJob".aoxAlarm[1..32]</td><td>one discrete alarm per bit, texts in HMI_STAGE2.md section 4. Later</td></tr>
+      <tr><td class="num">A35–A37</td><td>length, width, angle</td><td>I/O field, Real</td><td class="mono">"DB_Recipe".Cube.rLength, .rWidth, .rAngle</td><td>CUBE box. Both greater than 0: corners 2, 3, 4 and the approach are computed from corner 1, row 4. A moved cube of the same size: TEACH CORNER 1 only, START. Length 0 = the taught rows 5 to 7. Limits 0…4380, 0…4230, −180…180</td></tr>
+      <tr><td class="num">A38</td><td>SCAN FROM HERE</td><td>switch</td><td class="mono">"DB_Recipe".xFromHere</td><td>CUBE box. On: START takes the actual pose as corner 1 (cube, needs length and width) or as the drum center, begins with side 1 / above P0, stores nothing. Job error 6 when the robot is not referenced. One switch for both jobs, retentive</td></tr>
+      <tr><td class="num">A39–A41</td><td>TEACH HOME, TEACH START, TEACH CORNER 1</td><td>momentary button, each with a lamp</td><td class="mono">"DB_RobotHand".Btn.xTeachHome, .xTeachStart, .xTeachC1 · lamps "DB_Poses".aoxValid[1], [2], [4]</td><td>CUBE box. One press = row 1, 2 or 4 taught from the actual pose, the lamp turns green. Operable by A46 teach allowed. Corner 1: tool at the corner facing side 1, RotZ −180</td></tr>
+      <tr><td class="num">A42</td><td>ready</td><td>lamp</td><td class="mono">"DB_RobotHand".Lamp.xCubeReady</td><td>the three lamps in one: the cube can run</td></tr>
+      <tr><td class="num">A43, A44</td><td>GO TO START, GO TO CORNER 1</td><td>momentary button</td><td class="mono">"DB_RobotHand".Btn.xGoStart, .xGoC1</td><td>CUBE box. FB_CubeButtons copies row 2 or 4 into the target of screen 1, block 1, and gives one start. Operable by A46 go allowed: Enable on, AUTO off, engine idle</td></tr>
+      <tr><td class="num">A45</td><td>corners text</td><td>two texts, visibility</td><td class="mono">"DB_RobotHand".Lamp.xComputed</td><td>1: "computed from corner 1", 0: "taught, rows 5 to 7"</td></tr>
+      <tr><td class="num">A46</td><td>teach allowed, go allowed</td><td>lamp, and the enable of A39–A41, A43, A44, A4, A5</td><td class="mono">"DB_RobotHand".Lamp.xTeachAllowed, .xGoAllowed</td><td>Enable on, AUTO off, engine idle. Dynamize "operator control allowed" or the visibility of the buttons with it</td></tr>
+      <tr><td class="num">A47</td><td>ACK</td><td>momentary button</td><td class="mono">"DB_RobotHand".Btn.xAck</td><td>JOB box. Engine reset and job abort together for one cycle. RESET and ABORT may stay next to it</td></tr>
+      <tr><td class="num">A48</td><td>robot mode</td><td>two lamps</td><td class="mono">"DB_Robot".Status.xAutomatic and NOT the same</td><td>JOB box. "automatic" and "manual". No switch on "DB_App".Cmd.Automatic anywhere, FB_RobotMode is its one writer</td></tr>
+      <tr><td class="num">A49</td><td>PATH MODE</td><td>switch</td><td class="mono">"DB_Recipe".xPathMode</td><td>only with part 7 of AUTOMATIC_TODAY.md. Off = one move per point, the proven way. Leave it out until then</td></tr>
+      <tr><td class="num">A50</td><td>NO TURN</td><td>switch</td><td class="mono">"DB_Recipe".xNoTurn</td><td>CUBE box, one switch for both jobs. Cube job v0.6 (2026-11-04): every corner keeps the orientation of corner 1, the four turn moves are left out, corner 1 may stand at any RotZ. Drum job v0.5 (2026-11-06): every point of the circle keeps the RotZ of pose 8, the tool does not turn toward the axis, same 10 moves. Off = the +90 turns at the corners, corner 1 at −180; the drum circle from −180 to +180. Retentive</td></tr>
+      <tr><td class="num">A51</td><td>job</td><td>I/O field, Int</td><td class="mono">"DB_RobotJob".Man.intJob</td><td>JOB box. 1…3, start value 1, text list TL_Job. Or three buttons CUBE / DRUM / LINE with SetTagValue 1 / 2 / 3. FC_JobMux takes it over when no job runs (2026-11-06, 3 since 2026-11-09)</td></tr>
+      <tr><td class="num">A52</td><td>active job</td><td>output field, Int</td><td class="mono">"DB_RobotJob".intJobActive</td><td>JOB box, text list TL_Job. The job START runs</td></tr>
+      <tr><td class="num">A53</td><td>scan height</td><td>I/O field, Real</td><td class="mono">"DB_Recipe".Drum.rZ</td><td>DRUM box. −10…1908, 0 decimals. The Z of the four arcs</td></tr>
+      <tr><td class="num">A54</td><td>radius</td><td>I/O field, Real</td><td class="mono">"DB_Recipe".Drum.rRadius</td><td>DRUM box. 0…3000. Drum radius + sensor distance. 0 = job error 5</td></tr>
+      <tr><td class="num">A55</td><td>RotZ offset</td><td>I/O field, Real</td><td class="mono">"DB_Recipe".Drum.rRotZOffset</td><td>DRUM box. −180…180. 0 for the first test: P0 on the +X side, tool at RotZ −180 there. With the sensor: CHECKLIST_DRUM_AUTO.md D5</td></tr>
+      <tr><td class="num">A56</td><td>CLOCKWISE</td><td>switch</td><td class="mono">"DB_Recipe".Drum.xClockwise</td><td>DRUM box. Off = block 3 counter-clockwise, RotZ −180 up to +180. On = block 4 clockwise, +180 down to −180. Retentive</td></tr>
+      <tr><td class="num">A57</td><td>center taught</td><td>lamp</td><td class="mono">"DB_Poses".aoxValid[8]</td><td>DRUM box. Teach pose 8 with A3 = 8 and A4, the tool above the drum axis, any height. Or SCAN FROM HERE above the axis</td></tr>
+      <tr><td class="num">A58</td><td>active, drum</td><td>output field, Int</td><td class="mono">"DB_RobotJob".State.intMoveActive</td><td>JOB box, the same tag as A25 with text list TL_MoveDrum. Visibility A58: intJobActive = 2, A25: = 1. At job error 4 it is the bad point of the list</td></tr>
+      <tr><td class="num">A59</td><td>length</td><td>I/O field, Real</td><td class="mono">"DB_Recipe".Line.rLength</td><td>LINE box (2026-11-09). 0…4000, 0 decimals. The patch, the scanned part of every line. 0 = job error 5</td></tr>
+      <tr><td class="num">A60</td><td>pitch</td><td>I/O field, Real</td><td class="mono">"DB_Recipe".Line.rPitch</td><td>LINE box. −4000…4000, 0 decimals. Start to start between two lines. The sign is the side: + = the next line lies to the left of the line direction (+90°), − = to the right. 0 = job error 5</td></tr>
+      <tr><td class="num">A61</td><td>lines</td><td>I/O field, Int</td><td class="mono">"DB_Recipe".Line.intCount</td><td>LINE box. 1…5000 (50 in v0.1). Outside = job error 5. Not used with AREA (A75) on; A77 shows the computed number</td></tr>
+      <tr><td class="num">A62</td><td>lead-in</td><td>I/O field, Real</td><td class="mono">"DB_Recipe".Line.rLeadIn</td><td>LINE box. 0…500. Every line begins this much before its patch and ends this much after it, so the ramps lie outside the patch. 50 for the first tests</td></tr>
+      <tr><td class="num">A63</td><td>angle</td><td>I/O field, Real</td><td class="mono">"DB_Recipe".Line.rAngle</td><td>LINE box. −180…180. Direction of the lines, 0 = +X, 90 = +Y</td></tr>
+      <tr><td class="num">A64</td><td>scan height</td><td>I/O field, Real</td><td class="mono">"DB_Recipe".Line.rZ</td><td>LINE box. −10…1908. The Z of every line</td></tr>
+      <tr><td class="num">A65</td><td>face Z</td><td>I/O field, Real</td><td class="mono">"DB_Recipe".Line.rFaceZ</td><td>LINE box. 0…1908. 0 = not checked. Smaller Z is up on this machine: a scan height at or below the face is job error 9</td></tr>
+      <tr><td class="num">A66</td><td>RotZ offset</td><td>I/O field, Real</td><td class="mono">"DB_Recipe".Line.rRotZOffset</td><td>LINE box. −180…180. The tool's RotZ when it looks along +X, as A55. Used only with NO TURN off</td></tr>
+      <tr><td class="num">A67</td><td>ZIGZAG</td><td>switch</td><td class="mono">"DB_Recipe".Line.xZigzag</td><td>LINE box. On = serpentine, every odd line runs backwards, the index move is the pitch. Off = raster, every line the same way, the move back is the long diagonal at normal speed. Retentive</td></tr>
+      <tr><td class="num">A68</td><td>INDEX ALONG</td><td>switch</td><td class="mono">"DB_Recipe".Line.xIndexAlong</td><td>LINE box. Off = the next line lies beside this one. On = further along the same line: the patch scan, pitch larger than length + 2 × lead-in. Retentive</td></tr>
+      <tr><td class="num">A69</td><td>LIFT BETWEEN</td><td>switch</td><td class="mono">"DB_Recipe".Line.xLiftBetween</td><td>LINE box. On = lift, travel at lift Z, slow descent between two lines (the retract of the patch scan). Retentive</td></tr>
+      <tr><td class="num">A70</td><td>lift Z</td><td>I/O field, Real</td><td class="mono">"DB_Recipe".Line.rLiftZ</td><td>LINE box. −10…1908. The height of the travel with LIFT BETWEEN. 0 = safe Z (A2)</td></tr>
+      <tr><td class="num">A71</td><td>start taught</td><td>lamp</td><td class="mono">"DB_Poses".aoxValid[9]</td><td>LINE box. Teach pose 9 with A3 = 9 and A4, the tool at the first point to scan, any height; X, Y, RotZ, RotY are used, the height is A64. Or SCAN FROM HERE (A38) at that point</td></tr>
+      <tr><td class="num">A72</td><td>active, line</td><td>output field, Int</td><td class="mono">"DB_RobotJob".State.intMoveActive</td><td>JOB box, the same tag as A25 and A58 with text list TL_MoveLine. Visibility: intJobActive = 3. The number is the kind of move, A73 says which line</td></tr>
+      <tr><td class="num">A73</td><td>line</td><td>output field, Int</td><td class="mono">"DB_RobotJob".intLineActive</td><td>JOB box, next to A72. The line k of the active move, 0 … lines − 1. At job error 4 it is the bad line</td></tr>
+      <tr><td class="num">A74</td><td>scan window</td><td>lamp</td><td class="mono">"DB_RobotJob".xScanWindow</td><td>JOB box. On while the tool is inside a patch during a line move, off on the lead-in and the lead-out. The bit the sensor reads later. One writer: FB_ScanLineJob</td></tr>
+      <tr><td class="num">A75</td><td>AREA</td><td>switch</td><td class="mono">"DB_Recipe".Line.xArea</td><td>LINE box (v0.2, 2026-11-09). On = the area by two taught corners: pose 9 = corner 1, pose 10 = the opposite corner. The angle sets the axis; the extent of corner 2 along it is the length, the extent across it divided by the pitch (size only) the number of lines minus one; the lines walk toward corner 2. Corner 2 behind corner 1: the axis is turned 180. With INDEX ALONG the patch length stays A59 and the patches run from corner 1 up to corner 2. Off = A59 and A61 as typed. Retentive</td></tr>
+      <tr><td class="num">A76</td><td>corner 2 taught</td><td>lamp</td><td class="mono">"DB_Poses".aoxValid[10]</td><td>LINE box (v0.2). Teach pose 10 with A3 = 10 and A4, the tool over the opposite corner of the area, any height, any RotZ; X and Y are used. Only with AREA. Not taught with AREA on = job error 1</td></tr>
+      <tr><td class="num">A77</td><td>lines of the job</td><td>output field, Int</td><td class="mono">"DB_RobotJob".intLineCount</td><td>LINE box next to A61 (v0.2). The lines the job built at the last START: A61 as typed, or the computed number with AREA. One writer: FB_ScanLineJob</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ============================================================ 3 OLD SCREEN -->
+  <h2 id="old">3. The old robot screen – what tomorrow still needs from it</h2>
+  <p class="lede">Your screen from before stage 1. These elements write <code>DB_App.Cmd</code> straight to the module 1 FB in OB30 network 2, and nothing of ours writes them. Three elements must be gone and one re-bound, BLOCK_MAP.md part B3.</p>
+
+  <div class="hmi">
+    <div class="hmi-title"><span>Old robot screen</span><small>O1 … O9</small></div>
+    <div class="cols">
+      <div class="grp"><div class="grp-t">ROBOT MODE</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">O1</span>automatic</span><span class="sw on"><i></i>on</span><span class="tag">"DB_App".Cmd.Automatic</span><span class="hint">PO 2.0. Manual = jog and home, automatic = MOVE and START. From step 1a on FB_RobotMode is the one writer: delete this switch, show a lamp on "DB_Robot".Status.xAutomatic (M13)</span></div>
+          <div class="obj"><span class="top"><span class="n">O2</span>simulation</span><span class="sw"><i></i>off</span><span class="tag">"DB_App".Cmd.Simulation</span><span class="hint">ON only for step 10</span></div>
+          <div class="obj"><span class="top"><span class="n">O3</span>robot reset</span><span class="mom">RESET</span><span class="tag">"DB_App".Cmd.Reset</span><span class="hint">acknowledges a robot fault. No jog or home button pressed while you press it</span></div>
+          <div class="obj"><span class="top"><span class="n">O4</span>pause · stop</span><span class="btn">PAUSE</span><span class="tag">"DB_App".Cmd.Pause, "DB_App".Cmd.Stop</span><span class="hint">stay off all day</span></div>
+          <div class="obj"><span class="top"><span class="n">O5</span>jog coordinates</span><span class="sw"><i></i>joint</span><span class="tag">"DB_App".Cmd.Jog_Joint_Base, "DB_App".Cmd.Jog_Axis</span><span class="hint">both off = base. Axis = single axis, also unreferenced</span></div>
+        </div>
+      </div>
+      <div class="grp"><div class="grp-t">JOG AND HOME</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">O6</span>X− · X+</span><span><span class="mom">X−</span> <span class="mom">X+</span></span><span class="tag">"DB_App".Cmd.Jog_Neg_X, "DB_App".Cmd.Jog_Pos_X</span><span class="hint">joint 1</span></div>
+          <div class="obj"><span class="top"><span class="n">O6</span>Y− · Y+</span><span><span class="mom">Y−</span> <span class="mom">Y+</span></span><span class="tag">"DB_App".Cmd.Jog_Neg_Y, "DB_App".Cmd.Jog_Pos_Y</span><span class="hint">joint 2</span></div>
+          <div class="obj"><span class="top"><span class="n">O6</span>Z− · Z+</span><span><span class="mom">Z−</span> <span class="mom">Z+</span></span><span class="tag">"DB_App".Cmd.Jog_Neg_Z, "DB_App".Cmd.Jog_Pos_Z</span><span class="hint">joint 3</span></div>
+          <div class="obj"><span class="top"><span class="n">O6</span>RotZ− · RotZ+</span><span><span class="mom">R1−</span> <span class="mom">R1+</span></span><span class="tag">"DB_App".Cmd.Jog_Neg_R1, "DB_App".Cmd.Jog_Pos_R1</span><span class="hint">joint 4</span></div>
+          <div class="obj"><span class="top"><span class="n">O6</span>RotY− · RotY+</span><span><span class="mom">R2−</span> <span class="mom">R2+</span></span><span class="tag">"DB_App".Cmd.Jog_Neg_R2, "DB_App".Cmd.Jog_Pos_R2</span><span class="hint">joint 5</span></div>
+          <div class="obj"><span class="top"><span class="n">O7</span>home X … RotY</span><span><span class="mom">HOME X</span> …</span><span class="tag">"DB_App".Cmd.Home_X1, .Home_Y1, .Home_Z1, .Home_R1, .Home_R2</span><span class="hint">start referencing axis 1 … 5, PO 2.10 … 2.14</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="alarm"><span class="n">O8</span> <b>Gone:</b> Start button (<span class="tag" style="display:inline">"DB_App".Cmd.Start</span>), program number field (<span class="tag" style="display:inline">.Cmd.ProgramNumber</span>), override field (<span class="tag" style="display:inline">.Cmd.Override</span>). FB_RobotMove writes them now. From step 1a also the automatic switch (<span class="tag" style="display:inline">.Cmd.Automatic</span>), FB_RobotMode writes it. &nbsp; <span class="n">O9</span> <b>Re-bound:</b> the enable switch goes to <span class="tag" style="display:inline">"DB_RobotMove".Man.xEnable</span>. OB1 network 8 is the only writer of <span class="tag" style="display:inline">"DB_App".Cmd.Enable</span>.</div>
+  </div>
+
+  <!-- ============================================================ 4 TEXT LISTS -->
+  <h2 id="lists">4. Text lists</h2>
+  <p class="lede">Nine lists, bound to the fields named above. The number is what the PLC sends, the text is what the operator reads.</p>
+  <div class="lists">
+    <table><caption>TL_Step – M30, A28</caption><tbody>
+      <tr><td class="num">0</td><td>idle</td></tr><tr><td class="num">5</td><td>check</td></tr><tr><td class="num">10</td><td>write pose</td></tr><tr><td class="num">15</td><td>program stop</td></tr><tr><td class="num">20</td><td>settle</td></tr><tr><td class="num">30</td><td>start</td></tr><tr><td class="num">40</td><td>wait running</td></tr><tr><td class="num">50</td><td>moving</td></tr><tr><td class="num">60</td><td>end</td></tr><tr><td class="num">90</td><td>error</td></tr>
+    </tbody></table>
+    <table><caption>TL_Err – M31, A26, A29</caption><tbody>
+      <tr><td class="num">0</td><td>no error</td></tr><tr><td class="num">1</td><td>block not in program 20</td></tr><tr><td class="num">2</td><td>X Y Z outside limits</td></tr><tr><td class="num">3</td><td>RotZ RotY outside limits</td></tr><tr><td class="num">4</td><td>circle without radius</td></tr><tr><td class="num">5</td><td>robot not ready / referenced / automatic / access / setpoints</td></tr><tr><td class="num">6</td><td>robot moving, program running or paused</td></tr><tr><td class="num">7</td><td>communication not ok</td></tr><tr><td class="num">8</td><td>override is 0</td></tr><tr><td class="num">10</td><td>wrong block echoed</td></tr><tr><td class="num">11</td><td>program did not start</td></tr><tr><td class="num">12</td><td>move timeout</td></tr><tr><td class="num">13</td><td>run number echo wrong</td></tr><tr><td class="num">14</td><td>program 20 not ready on the robot</td></tr><tr><td class="num">15</td><td>program stop not taken, repositioning stays</td></tr><tr><td class="num">16</td><td>path longer than 7 poses (part 7)</td></tr><tr><td class="num">20</td><td>aborted: enable off</td></tr><tr><td class="num">21</td><td>aborted: robot fault</td></tr><tr><td class="num">22</td><td>aborted: access lost</td></tr>
+    </tbody></table>
+    <table><caption>TL_Block – M7</caption><tbody>
+      <tr><td class="num">1</td><td>linear</td></tr><tr><td class="num">2</td><td>linear slow</td></tr><tr><td class="num">3</td><td>circle ccw (after part 6)</td></tr><tr><td class="num">4</td><td>circle cw (after part 6)</td></tr><tr><td class="num">5</td><td>rectangle, 7 lin (path mode, part 7)</td></tr><tr><td class="num">6</td><td>circle ccw, one run (path mode, drum checklist part F)</td></tr><tr><td class="num">7</td><td>circle cw, one run</td></tr>
+    </tbody></table>
+    <table><caption>TL_JobErr – A21</caption><tbody>
+      <tr><td class="num">0</td><td>no error</td></tr><tr><td class="num">1</td><td>a pose of the job is not taught (cube: 2 and 4, drum: 2 and 8, line: 2 and 9, with AREA 10)</td></tr><tr><td class="num">2</td><td>safe Z not set</td></tr><tr><td class="num">3</td><td>engine busy or in error at start</td></tr><tr><td class="num">4</td><td>a pose of the job is outside the limits (see active)</td></tr><tr><td class="num">5</td><td>a number of the recipe is not set: drum radius; line length, pitch or count; with AREA corner 2 gives no length or too many lines (2026-11-09)</td></tr><tr><td class="num">6</td><td>scan from here not possible: not referenced, or no length and width</td></tr><tr><td class="num">9</td><td>scan height not above the face (line job, 2026-11-09)</td></tr><tr><td class="num">10</td><td>engine error during the job (see engine error)</td></tr>
+    </tbody></table>
+    <table><caption>TL_JobStep – A22</caption><tbody>
+      <tr><td class="num">0</td><td>idle</td></tr><tr><td class="num">10</td><td>build list</td></tr><tr><td class="num">20</td><td>push</td></tr><tr><td class="num">30</td><td>run</td></tr><tr><td class="num">90</td><td>error</td></tr>
+    </tbody></table>
+    <table><caption>TL_Move – A25</caption><tbody>
+      <tr><td class="num">0</td><td>–</td></tr><tr><td class="num">1</td><td>to start</td></tr><tr><td class="num">2</td><td>approach</td></tr><tr><td class="num">3</td><td>to corner 1</td></tr><tr><td class="num">4</td><td>side 1</td></tr><tr><td class="num">5</td><td>turn at corner 2</td></tr><tr><td class="num">6</td><td>side 2</td></tr><tr><td class="num">7</td><td>turn at corner 3</td></tr><tr><td class="num">8</td><td>side 3</td></tr><tr><td class="num">9</td><td>turn at corner 4</td></tr><tr><td class="num">10</td><td>side 4</td></tr><tr><td class="num">11</td><td>turn at corner 1</td></tr><tr><td class="num">12</td><td>lift</td></tr><tr><td class="num">13</td><td>to start</td></tr><tr><td class="num">14</td><td>home</td></tr>
+    </tbody></table>
+    <table><caption>TL_Job – A51, A52 (2026-11-06, 3 since 2026-11-09)</caption><tbody>
+      <tr><td class="num">1</td><td>scan cube</td></tr><tr><td class="num">2</td><td>scan drum</td></tr><tr><td class="num">3</td><td>scan line</td></tr>
+    </tbody></table>
+    <table><caption>TL_MoveLine – A72 (2026-11-09). The kind of move; A73 says which line</caption><tbody>
+      <tr><td class="num">0</td><td>–</td></tr><tr><td class="num">1</td><td>to start</td></tr><tr><td class="num">2</td><td>above line 0</td></tr><tr><td class="num">3</td><td>down onto line 0</td></tr><tr><td class="num">4</td><td>scan line</td></tr><tr><td class="num">5</td><td>index to next line</td></tr><tr><td class="num">6</td><td>lift between</td></tr><tr><td class="num">7</td><td>travel</td></tr><tr><td class="num">8</td><td>down onto the line</td></tr><tr><td class="num">9</td><td>lift</td></tr><tr><td class="num">10</td><td>to start</td></tr><tr><td class="num">11</td><td>home</td></tr>
+    </tbody></table>
+    <table><caption>TL_MoveDrum – A58 (2026-11-06)</caption><tbody>
+      <tr><td class="num">0</td><td>–</td></tr><tr><td class="num">1</td><td>to start</td></tr><tr><td class="num">2</td><td>above P0</td></tr><tr><td class="num">3</td><td>down to P0</td></tr><tr><td class="num">4</td><td>arc to P1</td></tr><tr><td class="num">5</td><td>arc to P2</td></tr><tr><td class="num">6</td><td>arc to P3</td></tr><tr><td class="num">7</td><td>arc to P0</td></tr><tr><td class="num">8</td><td>lift</td></tr><tr><td class="num">9</td><td>to start</td></tr><tr><td class="num">10</td><td>home</td></tr>
+    </tbody></table>
+  </div>
+
+  <!-- ============================================================ 5 LADDER -->
+  <h2 id="ladder">5. Ladder: jog X and home X</h2>
+  <p class="lede">The pattern for one axis. You copy it for Y, Z, RotZ and RotY with the table at the end. Tomorrow you jog with the old screen as it is. These rungs come in when you move jog and home onto the manual screen.</p>
+
+  <h3>What the bus wants, from the manual</h3>
+  <div class="facts">
+    <div class="fact"><b>Jog is a level</b><span>PO 3.0 … 3.11. The axis moves while the bit is set, stops when it falls. One jog signal selects jog mode by itself (6.1.4, 13.6.1).</span></div>
+    <div class="fact"><b>Home is an edge</b><span>PO 2.10 … 2.14 "start referencing axis n". The rising edge starts the reference travel of FCB 12 in the drive, the referenced bit PI 2.10 … 2.14 comes at the end (6.7).</span></div>
+    <div class="fact"><b>Only in manual</b><span>Jog mode and referencing mode are possible only in operating mode manual, PO 2.0 off. In automatic the robot ignores them (6.1.1).</span></div>
+    <div class="fact"><b>No signal set at a reset</b><span>Before a fault is acknowledged, no jog and no referencing signal may be set, or the robot moves at the acknowledge (6.2, 6.7). The rungs below drop every signal when the fault comes.</span></div>
+  </div>
+
+  <h3>The DB the rungs use</h3>
+  <p>One new small DB. The screen writes the requests, the rungs write the permissions and the edge memories. Nothing existing changes. File <code>DB_RobotHand.scl</code> in the folder.</p>
+<pre>DATA_BLOCK "DB_RobotHand"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// hand screen: jog and home requests from the hmi, permissions from the ob1 hand networks.
+// writers:  hmi -> Jog.*, Home.xX .. xRotY      ob1 hand networks -> the rest
+NON_RETAIN
+   VAR
+      Jog : STRUCT                       // hmi momentary buttons: press 1, release 0
+         xXPos, xXNeg : Bool;            // joint 1
+         xYPos, xYNeg : Bool;            // joint 2
+         xZPos, xZNeg : Bool;            // joint 3
+         xRotZPos, xRotZNeg : Bool;      // joint 4, r1
+         xRotYPos, xRotYNeg : Bool;      // joint 5, r2
+      END_STRUCT;
+      Home : STRUCT                      // hmi momentary buttons
+         xX, xY, xZ, xRotZ, xRotY : Bool;
+         xXEdge, xYEdge, xZEdge, xRotZEdge, xRotYEdge : Bool;   // edge memories of the p contacts
+      END_STRUCT;
+      xRobotManual : Bool;               // rung 1: robot healthy and in manual
+      xHandOK : Bool;                    // rung 2: hand actions allowed. hmi: jog and home buttons grey when false
+      tpHomeX, tpHomeY, tpHomeZ, tpHomeRotZ, tpHomeRotY : TP_TIME;   // the 500 ms start pulses
+   END_VAR
+BEGIN
+END_DATA_BLOCK</pre>
+
+  <div class="rung">
+    <h3>Rung 1 – the robot is healthy and in manual</h3>
+    <div class="ladder" id="r1"></div>
+    <p class="series">Series: comm ok, ready, not fault, access granted, not automatic → coil <code>"DB_RobotHand".xRobotManual</code>. All five are feedback from the robot, not our commands. A fault drops it in the same cycle, and with it every jog and home signal.</p>
+  </div>
+
+  <div class="rung">
+    <h3>Rung 2 – hand actions allowed</h3>
+    <div class="ladder" id="r2"></div>
+    <p class="series">Series: Enable switch, not AUTO, engine not busy, not in referencing mode, rung 1 → coil <code>"DB_RobotHand".xHandOK</code>. Bind the jog and home buttons' "enabled" property to this bit, then they are grey when nothing may move. The robot's moving bit is not in here: jogging makes it true, it would stop its own jog.</p>
+  </div>
+
+  <div class="rung">
+    <h3>Rung 3 – jog X positive</h3>
+    <div class="ladder" id="r3"></div>
+    <p class="series">Series: hand ok, button X+, not button X− → coil <code>"DB_App".Cmd.Jog_Pos_X</code>. A level, as long as the button is held. OB30 network 2 puts it on <code>jog_pos_J1X</code>.</p>
+  </div>
+
+  <div class="rung">
+    <h3>Rung 4 – jog X negative</h3>
+    <div class="ladder" id="r4"></div>
+    <p class="series">Series: hand ok, button X−, not button X+ → coil <code>"DB_App".Cmd.Jog_Neg_X</code>. The mirror of rung 3. Both buttons together: nothing moves.</p>
+  </div>
+
+  <div class="rung">
+    <h3>Rung 5 – home X, start the referencing of axis 1</h3>
+    <div class="ladder" id="r5"></div>
+    <p class="series">Series: hand ok, button HOME X with a P contact, robot not moving → <code>TP</code> pulse of 500 ms → coil <code>"DB_App".Cmd.Home_X1</code>. The P contact gives one cycle per press, the TP stretches it to a clean edge for the robot and clears it by itself. OB30 network 2 puts it on <code>homing_Start_X1</code>. Referencing runs in the drive (FCB 12) until <code>"DB_Robot".Status.aoxAxisReferenced[1]</code> comes. During it, <code>Status.xRefMode</code> is true and rung 2 blocks the jog buttons.</p>
+  </div>
+
+  <div class="note">
+    <b>One writer.</b> Today the old screen writes <code>"DB_App".Cmd.Jog_Pos_X</code> and <code>.Cmd.Home_X1</code> directly. The day rungs 3 to 5 go into OB1, the old buttons must be re-bound to <code>"DB_RobotHand".Jog.xXPos</code>, <code>.Jog.xXNeg</code> and <code>.Home.xX</code>, or deleted. A rung and a button on the same tag is the bug of BLOCK_MAP.md part B3.
+  </div>
+  <div class="note blue">
+    <b>Before homing an axis that is not referenced:</b> jog it to the reference position with the coordinate system "Axis" (<code>"DB_App".Cmd.Jog_Axis</code> on), the only system that jogs unreferenced (manual 6.2, 9.5). Your own homing helper in <code>"DB_App".Home</code> stays as it is; rung 5 is only the plain start of one axis.
+  </div>
+
+  <h3>The other four axes</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Axis</th><th>Joint</th><th>Jog buttons → rung 3 / 4 coil</th><th>OB30 NW2 pins</th><th>Home button → rung 5 coil</th><th>OB30 NW2 pin</th><th>Referenced bit</th><th>Timer</th></tr></thead>
+    <tbody>
+      <tr><td>X</td><td>1</td><td class="mono">Jog.xXPos / .xXNeg → Cmd.Jog_Pos_X / Jog_Neg_X</td><td class="mono">jog_pos_J1X / jog_neg_J1X</td><td class="mono">Home.xX, .xXEdge → Cmd.Home_X1</td><td class="mono">homing_Start_X1</td><td class="mono">Status.aoxAxisReferenced[1]</td><td class="mono">tpHomeX</td></tr>
+      <tr><td>Y</td><td>2</td><td class="mono">Jog.xYPos / .xYNeg → Cmd.Jog_Pos_Y / Jog_Neg_Y</td><td class="mono">jog_pos_J2Y / jog_neg_J2Y</td><td class="mono">Home.xY, .xYEdge → Cmd.Home_Y1</td><td class="mono">homing_Start_Y1</td><td class="mono">Status.aoxAxisReferenced[2]</td><td class="mono">tpHomeY</td></tr>
+      <tr><td>Z</td><td>3</td><td class="mono">Jog.xZPos / .xZNeg → Cmd.Jog_Pos_Z / Jog_Neg_Z</td><td class="mono">jog_pos_J3Z / jog_neg_J3Z</td><td class="mono">Home.xZ, .xZEdge → Cmd.Home_Z1</td><td class="mono">homing_Start_Z1</td><td class="mono">Status.aoxAxisReferenced[3]</td><td class="mono">tpHomeZ</td></tr>
+      <tr><td>RotZ</td><td>4 (R1)</td><td class="mono">Jog.xRotZPos / .xRotZNeg → Cmd.Jog_Pos_R1 / Jog_Neg_R1</td><td class="mono">jog_pos_J4R1 / jog_neg_J4R1</td><td class="mono">Home.xRotZ, .xRotZEdge → Cmd.Home_R1</td><td class="mono">homing_Start_R1</td><td class="mono">Status.aoxAxisReferenced[4]</td><td class="mono">tpHomeRotZ</td></tr>
+      <tr><td>RotY</td><td>5 (R2)</td><td class="mono">Jog.xRotYPos / .xRotYNeg → Cmd.Jog_Pos_R2 / Jog_Neg_R2</td><td class="mono">jog_pos_J5R2 / jog_neg_J5R2</td><td class="mono">Home.xRotY, .xRotYEdge → Cmd.Home_R2</td><td class="mono">homing_Start_R2</td><td class="mono">Status.aoxAxisReferenced[5]</td><td class="mono">tpHomeRotY</td></tr>
+    </tbody>
+  </table></div>
+  <p>Rungs 1 and 2 exist once. Rungs 3, 4 and 5 exist five times, one set per axis, with the names of the row. All five jog coils go through rung 2, so one Enable switch, one AUTO switch and one engine stop them all.</p>
+
+  <div class="foot">Sources: HMI_STAGE1.md, HMI_STAGE2.md, OB30 of 2026-10-29, BLOCK_MAP.md, MOVIKIT Robotics manual 33956901 (05/2026) chapters 6.1, 6.2, 6.7, 9.4, 9.5, 13.6.1, 13.7.1. Tags are written as they are bound in WinCC Unified.</div>
+</div>
+
+<script>
+(function(){
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  var Y=96, H=168, CELL=150;
+  function contact(cx,it){
+    var s='';
+    s+='<line x1="'+(cx-75)+'" y1="'+Y+'" x2="'+(cx-12)+'" y2="'+Y+'"/>';
+    s+='<line x1="'+(cx+12)+'" y1="'+Y+'" x2="'+(cx+75)+'" y2="'+Y+'"/>';
+    s+='<line x1="'+(cx-12)+'" y1="'+(Y-16)+'" x2="'+(cx-12)+'" y2="'+(Y+16)+'"/>';
+    s+='<line x1="'+(cx+12)+'" y1="'+(Y-16)+'" x2="'+(cx+12)+'" y2="'+(Y+16)+'"/>';
+    if(it.t==='nc') s+='<line x1="'+(cx-9)+'" y1="'+(Y+16)+'" x2="'+(cx+9)+'" y2="'+(Y-16)+'"/>';
+    if(it.t==='p') s+='<text x="'+cx+'" y="'+(Y+4)+'" class="pm">P</text>';
+    s+='<text x="'+cx+'" y="'+(Y-44)+'" class="l1">'+esc(it.a)+'</text>';
+    s+='<text x="'+cx+'" y="'+(Y-29)+'" class="l2">'+esc(it.b)+'</text>';
+    if(it.c) s+='<text x="'+cx+'" y="'+(Y+38)+'" class="l3">'+esc(it.c)+'</text>';
+    return s;
+  }
+  function coil(cx,it){
+    var s='<g class="coil">';
+    s+='<line x1="'+(cx-75)+'" y1="'+Y+'" x2="'+(cx-16)+'" y2="'+Y+'"/>';
+    s+='<path d="M '+(cx-5)+' '+(Y-16)+' A 18 18 0 0 0 '+(cx-5)+' '+(Y+16)+'"/>';
+    s+='<path d="M '+(cx+5)+' '+(Y-16)+' A 18 18 0 0 1 '+(cx+5)+' '+(Y+16)+'"/>';
+    s+='<text x="'+cx+'" y="'+(Y-44)+'" class="l1">'+esc(it.a)+'</text>';
+    s+='<text x="'+cx+'" y="'+(Y-29)+'" class="l2">'+esc(it.b)+'</text>';
+    s+='</g>';
+    return s;
+  }
+  function tp(x0,it){
+    var bx=x0+22, bw=106, s='';
+    s+='<line x1="'+x0+'" y1="'+Y+'" x2="'+bx+'" y2="'+Y+'"/>';
+    s+='<rect x="'+bx+'" y="'+(Y-22)+'" width="'+bw+'" height="68" rx="3"/>';
+    s+='<text x="'+(bx+bw/2)+'" y="'+(Y-44)+'" class="l1">'+esc(it.a)+'</text>';
+    s+='<text x="'+(bx+bw/2)+'" y="'+(Y-29)+'" class="l2">'+esc(it.b)+'</text>';
+    s+='<text x="'+(bx+bw/2)+'" y="'+(Y-6)+'" class="bt">TP</text>';
+    s+='<text x="'+(bx+bw/2)+'" y="'+(Y+8)+'" class="l3">Time</text>';
+    s+='<text x="'+(bx+5)+'" y="'+(Y+4)+'" class="pin">IN</text>';
+    s+='<text x="'+(bx+5)+'" y="'+(Y+34)+'" class="pin">PT</text>';
+    s+='<text x="'+(bx+bw-5)+'" y="'+(Y+4)+'" class="pin r">Q</text>';
+    s+='<text x="'+(bx+bw-5)+'" y="'+(Y+34)+'" class="pin r">ET</text>';
+    s+='<line x1="'+(bx-26)+'" y1="'+(Y+30)+'" x2="'+bx+'" y2="'+(Y+30)+'"/>';
+    s+='<text x="'+(bx-4)+'" y="'+(Y+26)+'" class="l2 r">'+esc(it.pt)+'</text>';
+    s+='<line x1="'+(bx+bw)+'" y1="'+Y+'" x2="'+(x0+CELL)+'" y2="'+Y+'"/>';
+    s+='<line x1="'+(bx+bw)+'" y1="'+(Y+30)+'" x2="'+(bx+bw+12)+'" y2="'+(Y+30)+'"/>';
+    return s;
+  }
+  function rung(spec){
+    var x=40, body='';
+    spec.items.forEach(function(it){
+      if(it.t==='tp'){ body+=tp(x,it); }
+      else if(it.t==='coil'){ body+=coil(x+75,it); }
+      else { body+=contact(x+75,it); }
+      x+=CELL;
+    });
+    var W=x+10;
+    return '<svg class="lad" viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+esc(spec.aria)+'">'
+      +'<line class="rail" x1="40" y1="'+(Y-52)+'" x2="40" y2="'+(Y+52)+'"/>'+body+'</svg>';
+  }
+  var R=[
+    {id:'r1',aria:'Rung 1: comm ok, ready, not fault, access granted, not automatic, in series, set the coil DB_RobotHand.xRobotManual',items:[
+      {t:'no',a:'"DB_Robot".Status',b:'.xCommOK'},
+      {t:'no',a:'"DB_Robot".Status',b:'.xReady'},
+      {t:'nc',a:'"DB_Robot".Status',b:'.xFault'},
+      {t:'no',a:'"DB_Robot".Status',b:'.xAccessGranted'},
+      {t:'nc',a:'"DB_Robot".Status',b:'.xAutomatic'},
+      {t:'coil',a:'"DB_RobotHand"',b:'.xRobotManual'}]},
+    {id:'r2',aria:'Rung 2: enable switch, not auto, engine not busy, not referencing mode, robot manual, in series, set the coil DB_RobotHand.xHandOK',items:[
+      {t:'no',a:'"DB_RobotMove".Man',b:'.xEnable'},
+      {t:'nc',a:'"DB_RobotJob".Man',b:'.xAuto'},
+      {t:'nc',a:'"DB_RobotMove".State',b:'.xBusy'},
+      {t:'nc',a:'"DB_Robot".Status',b:'.xRefMode'},
+      {t:'no',a:'"DB_RobotHand"',b:'.xRobotManual'},
+      {t:'coil',a:'"DB_RobotHand"',b:'.xHandOK'}]},
+    {id:'r3',aria:'Rung 3: hand ok, button X plus, not button X minus, in series, set the coil DB_App.Cmd.Jog_Pos_X',items:[
+      {t:'no',a:'"DB_RobotHand"',b:'.xHandOK'},
+      {t:'no',a:'"DB_RobotHand".Jog',b:'.xXPos'},
+      {t:'nc',a:'"DB_RobotHand".Jog',b:'.xXNeg'},
+      {t:'coil',a:'"DB_App".Cmd',b:'.Jog_Pos_X'}]},
+    {id:'r4',aria:'Rung 4: hand ok, button X minus, not button X plus, in series, set the coil DB_App.Cmd.Jog_Neg_X',items:[
+      {t:'no',a:'"DB_RobotHand"',b:'.xHandOK'},
+      {t:'no',a:'"DB_RobotHand".Jog',b:'.xXNeg'},
+      {t:'nc',a:'"DB_RobotHand".Jog',b:'.xXPos'},
+      {t:'coil',a:'"DB_App".Cmd',b:'.Jog_Neg_X'}]},
+    {id:'r5',aria:'Rung 5: hand ok, rising edge of button home X, robot not moving, into a TP pulse timer of 500 ms, whose Q sets the coil DB_App.Cmd.Home_X1',items:[
+      {t:'no',a:'"DB_RobotHand"',b:'.xHandOK'},
+      {t:'p',a:'"DB_RobotHand".Home',b:'.xX',c:'"DB_RobotHand".Home.xXEdge'},
+      {t:'nc',a:'"DB_Robot".Status',b:'.xMoving'},
+      {t:'tp',a:'"DB_RobotHand"',b:'.tpHomeX',pt:'T#500ms'},
+      {t:'coil',a:'"DB_App".Cmd',b:'.Home_X1'}]}
+  ];
+  R.forEach(function(spec){ var el=document.getElementById(spec.id); if(el) el.innerHTML=rung(spec); });
+})();
+</script>

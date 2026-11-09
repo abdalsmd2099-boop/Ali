@@ -1,0 +1,58 @@
+FUNCTION "FC_RobotAlarms" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.2
+// stage 2 step 10, first part. one alarm bit per error, for the hmi discrete alarms.
+// ob1, last robot network. the only writer of "DB_RobotJob".aoxAlarm.
+// bit map (texts in hmi_stage2.md):
+//    1..22   move engine error numbers, goals.md 5.5 (16 = path longer than 7 poses; 17..19 see below)
+//    9       job error 5, a number of the recipe not set: drum radius, line length / pitch / count (2026-10-31, bit 9 was free)
+//    15      job error 6, scan from here not possible (2026-11-02, bit 15 was free)
+//    17      job error 9, scan height not above the face, line job (v0.2, 2026-11-09, bit 17 was free)
+//    23..27  job errors 1, 2, 3, 4, 10
+//    28..32  robot: fault, comm lost, access taken, outside workspace, warning
+// v0.2 (2026-11-09): one line, job error 9 on bit 17. bits 18 and 19 stay free
+   VAR_INPUT
+      i_udtMoveState : "UDT_MoveState";   // "DB_RobotMove".State
+      i_udtJobState : "UDT_JobState";     // "DB_RobotJob".State
+      i_udtStatus : "UDT_RobotStatus";    // "DB_Robot".Status
+   END_VAR
+
+   VAR_OUTPUT
+      o_aoxAlarm : Array[1..32] of Bool;  // => "DB_RobotJob".aoxAlarm
+   END_VAR
+
+   VAR_TEMP
+      tmp_i : Int;
+   END_VAR
+
+BEGIN
+   FOR #tmp_i := 1 TO 32 DO
+      #o_aoxAlarm[#tmp_i] := FALSE;
+   END_FOR;
+
+   // move engine: the error number is the bit. range check on its own line, rule 8
+   IF #i_udtMoveState.xError AND #i_udtMoveState.intErrId >= 1 AND #i_udtMoveState.intErrId <= 22 THEN
+      #o_aoxAlarm[#i_udtMoveState.intErrId] := TRUE;
+   END_IF;
+
+   // job
+   IF #i_udtJobState.xError THEN
+      CASE #i_udtJobState.intErrId OF
+         1:  #o_aoxAlarm[23] := TRUE;    // a cube pose is not taught
+         2:  #o_aoxAlarm[24] := TRUE;    // safe z not set
+         3:  #o_aoxAlarm[25] := TRUE;    // engine busy or in error at job start
+         4:  #o_aoxAlarm[26] := TRUE;    // a pose of the job is outside the limits
+         5:  #o_aoxAlarm[9] := TRUE;     // drum radius not set
+         6:  #o_aoxAlarm[15] := TRUE;    // scan from here not possible
+         9:  #o_aoxAlarm[17] := TRUE;    // v0.2: scan height not above the face (line job)
+         10: #o_aoxAlarm[27] := TRUE;    // engine error during the job
+      END_CASE;
+   END_IF;
+
+   // robot
+   #o_aoxAlarm[28] := #i_udtStatus.xFault;
+   #o_aoxAlarm[29] := NOT #i_udtStatus.xCommOK;
+   #o_aoxAlarm[30] := NOT #i_udtStatus.xAccessGranted;
+   #o_aoxAlarm[31] := #i_udtStatus.xOutsideWorkspace;
+   #o_aoxAlarm[32] := #i_udtStatus.xWarning;
+END_FUNCTION

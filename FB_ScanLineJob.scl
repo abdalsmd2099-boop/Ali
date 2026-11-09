@@ -1,0 +1,564 @@
+FUNCTION_BLOCK "FB_ScanLineJob"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.2
+// 2026-11-09. one button, one line scan: n straight lines at one height. with the two switches it
+// is a serpentine (zigzag), a raster (one way) or a patch scan (index along the line). same shape
+// as fb_scancubejob and fb_scandrumjob: build the geometry, check it, push, count. no motion
+// code, the engine does the rest. runs in ob1 after the drum job, instance "IDB_ScanLineJob",
+// job 3 in fc_jobmux. spec and the reasons: check_other_ideas_changes_critiqe/SCAN_TYPES.md
+// sections 4, 5, 7 (decided 2026-11-08, the build released 2026-11-09 after the drum ran).
+//
+// v0.1 (2026-11-09): the job as described below, the list of moves kept in arrays of 203 entries,
+// at most 50 lines (job error 5 above that).
+// v0.2 (2026-11-09, the same day, the whole table): two things.
+//    1. no list any more. the geometry is frozen into udtGeo ("UDT_LineGeo") at the start and every
+//       move is computed from its index by "FC_LineMove" when it is pushed. the moves, their order,
+//       their ids and the line numbers are exactly those of v0.1. the limit of 50 lines is gone:
+//       up to MAX_LINES = 5000 lines (the move counters are int). the check before the first push
+//       covers the whole job without a list: every point of the job lies inside the parallelogram
+//       of the four outer line ends, at the scan height, at safe z and at lift z, with both rotz
+//       values; those corners go through fc_posecheck (24 poses at most), plus pose 2 and pose 1.
+//       the engine checks every target again in its step 5, as always.
+//    2. AREA mode, i_xArea = "DB_Recipe".Line.xArea, off = exactly v0.1. on = the area is given
+//       by two corners instead of length and lines: pose 9 is corner 1 (as before, the start of
+//       line 0), pose 10 is the opposite corner 2. the angle sets the axis of the lines; the job
+//       takes the extent of corner 2 along that axis as the length and the extent across it,
+//       divided by the pitch, as the number of lines (plus one), and the side from where corner 2
+//       lies, so the sign of the pitch does not matter. if corner 2 lies behind corner 1 along the
+//       axis, the axis is turned by 180, so the lines always run from corner 1 toward corner 2.
+//       with INDEX ALONG the length stays the typed patch length and the patches are set along the
+//       axis up to corner 2, pitch apart. the lines field is ignored, o_intLineCount shows what was
+//       computed. the last line lies at most one pitch before corner 2 (floor). pose 10 not taught
+//       = job error 1; corner 2 on the across line only (length 0) or more than MAX_LINES lines =
+//       job error 5. scan from here works with it: the actual pose is corner 1, pose 10 corner 2.
+//    long lines at a low override take longer than the engine's 60 s: fb_robotmove v0.8 adds the
+//    distance divided by "DB_RobotMove".Cfg.rMinSpeed to the time limit (0 = as before).
+//
+// program 20: block 1 (linear) for every index, lift and travel move, block 2 (linear slow) for
+// the scan lines and for the moves down onto a line. nothing new in program 20,
+// Cfg.intBlocksInPrg20 stays 4.
+//
+// what it needs (hmi: the LINE box, hmi_stage2.md section 7):
+//    pose 9      the start of line 0: jog the tool to the first point that is to be scanned, at
+//                any height, TEACH 9. x, y, rotz and roty of it are used, the height is Line.rZ.
+//                with i_xFromHere the actual pose is the start instead, nothing is stored
+//    pose 10     area mode only: the opposite corner of the area, any height, TEACH 10. x, y used
+//    pose 2      start, pose 1 home (optional), rSafeZ, as for the cube and the drum
+//    Line.rLength      mm, the patch: the part of every line that is scanned. 0 = job error 5.
+//                      area mode without index along: not used, the length comes from corner 2
+//    Line.rPitch       mm, start to start between two lines. the sign is the side: + = the next
+//                      line lies to the left of the line direction (+90 deg), - = to the right.
+//                      0 = job error 5. area mode: only the size counts, the side comes from corner 2
+//    Line.intCount     lines, 1 .. MAX_LINES (5000). area mode: not used, computed
+//    Line.rLeadIn      mm, every line begins this much before its patch and ends this much after
+//                      it, so the ramps lie outside the patch (SCAN_TYPES.md 3.2). 0 allowed
+//    Line.rAngle       deg, direction of the lines in the base system, 0 = +x, 90 = +y
+//    Line.rZ           mm, scan height
+//    Line.rFaceZ       mm, the face that is scanned. 0 = not checked. smaller z is up on this
+//                      machine (seen 2026-11-05 and 11-06): rZ must be smaller than it, else
+//                      job error 9
+//    Line.rRotZOffset  deg, the tool rotz when it looks along +x, as Drum.rRotZOffset
+//    Line.xZigzag      off = raster: every line runs in the same direction, the index move is the
+//                      long diagonal back. on = serpentine: every odd line runs backwards
+//    Line.xIndexAlong  off = the next line lies beside this one (raster, serpentine). on = the
+//                      next line lies further along the same line (the patch scan, pitch > length)
+//    Line.xLiftBetween off = the index move runs at the scan height. on = lift, travel, down
+//                      between two lines (the retract of the patch scan)
+//    Line.rLiftZ       mm, the height of the travel with lift between. 0 = rSafeZ
+//    Line.xArea        v0.2: the area by two corners, pose 9 and pose 10, see above
+//    xNoTurn           "DB_Recipe".xNoTurn, the switch of the cube and the drum. on = every point
+//                      keeps the rotz of pose 9 (the proven way, the first run). off = the tool
+//                      looks along the line, rotz = rAngle + rRotZOffset; in the serpentine it is
+//                      turned 180 on every odd line, inside the index move (SCAN_TYPES.md 7.5)
+//
+// the moves. intId = the kind of move (hmi text TL_MoveLine), o_intLineActive = the line k:
+//     1 to start (pose 2)            2 above line 0 at safe z         3 down onto line 0, slow
+//     4 scan line k, slow            5 index to line k+1             6 lift between (to lift z)
+//     7 travel at lift z             8 down onto line k+1, slow      9 lift to safe z
+//    10 to start (pose 2)           11 home (pose 1), only if pose 1 is taught
+// moves total = 3 + n + (n - 1) * 1 (or * 3 with lift between) + 2, + 1 with home, - 1 with
+// scan from here (no "to start" at the beginning). the order, move by move: fc_linemove.
+//
+// geometry. d = (cos a, sin a) the line direction, e = (-sin a, cos a) across it, to the left.
+//    a_k = a_0 + k * pitch * e   (index across)       a_k = a_0 + k * pitch * d   (index along)
+//    the line k runs from a_k - leadin * d to a_k + (length + leadin) * d; an odd line of the
+//    serpentine runs the same two points the other way round. the patch k is a_k .. a_k + length * d,
+//    the window bit o_xScanWindow is on while the actual x y lie inside it during the line move.
+//
+// the queue holds 50 entries: this block pushes while the queue has fewer than QUEUE_KEEP entries,
+// one per cycle, not everything at once as the drum job does.
+   VAR_INPUT
+      i_xStart : Bool;                          // hmi button, momentary, gated by Man.intJob = 3 in ob1
+      i_xAbort : Bool;                          // hmi button, momentary. also clears a job error
+      i_xAuto : Bool;                           // auto switch and enable. falls while running = abort
+      i_intOverride : Int;                      // % for every move
+      i_aoudtP : Array[1..50] of "UDT_Pose";    // "DB_Poses".aoudtP
+      i_aoxValid : Array[1..50] of Bool;        // "DB_Poses".aoxValid
+      i_rSafeZ : Real;                          // "DB_Poses".rSafeZ
+      i_rLength : Real;                         // "DB_Recipe".Line.rLength
+      i_rPitch : Real;                          // "DB_Recipe".Line.rPitch
+      i_intCount : Int;                         // "DB_Recipe".Line.intCount
+      i_rLeadIn : Real;                         // "DB_Recipe".Line.rLeadIn
+      i_rAngle : Real;                          // "DB_Recipe".Line.rAngle
+      i_rZ : Real;                              // "DB_Recipe".Line.rZ
+      i_rFaceZ : Real;                          // "DB_Recipe".Line.rFaceZ
+      i_rRotZOffset : Real;                     // "DB_Recipe".Line.rRotZOffset
+      i_xZigzag : Bool;                         // "DB_Recipe".Line.xZigzag
+      i_xIndexAlong : Bool;                     // "DB_Recipe".Line.xIndexAlong
+      i_xLiftBetween : Bool;                    // "DB_Recipe".Line.xLiftBetween
+      i_rLiftZ : Real;                          // "DB_Recipe".Line.rLiftZ
+      i_udtMoveState : "UDT_MoveState";         // "DB_RobotMove".State
+      i_intQueueCount : Int;                    // "DB_MoveQueue".intCount
+      i_xFromHere : Bool;                       // "DB_Recipe".xFromHere: the actual pose is the start of line 0
+      i_udtActual : "UDT_Pose";                 // "DB_Robot".Status.udtPoseBcs. also read for the window bit
+      i_xActualValid : Bool;                    // "DB_Robot".Status.xReferenced AND .xCommOK
+      i_xNoTurn : Bool;                         // "DB_Recipe".xNoTurn: every point keeps the rotz of pose 9
+      i_xArea : Bool;                           // v0.2: "DB_Recipe".Line.xArea, the area by pose 9 and pose 10. off = v0.1
+   END_VAR
+
+   VAR_OUTPUT
+      o_udtOut : "UDT_JobOut";                  // => "DB_RobotJob".Line
+      o_xScanWindow : Bool;                     // => "DB_RobotJob".xScanWindow. on while the tool is inside a patch during a line move
+      o_intLineActive : Int;                    // => "DB_RobotJob".intLineActive. the line k (0 .. n-1) of the active move
+      o_intLineCount : Int;                     // v0.2: => "DB_RobotJob".intLineCount. the lines of the job as built (typed, or computed in area mode)
+   END_VAR
+
+   VAR
+      intStep : Int;                            // 0 idle, 10 build, 20 push while the queue has room, 30 run out, 90 error
+      xStartOld : Bool;
+      xAbortOld : Bool;
+      udtGeo : "UDT_LineGeo";                   // v0.2: the frozen geometry of the running job. fc_linemove computes every move from it
+      intPushIdx : Int;                         // the next move to push, 1 .. udtGeo.intMoves
+   END_VAR
+
+   VAR_TEMP
+      tmp_xStartEdge : Bool;
+      tmp_xAbortEdge : Bool;
+      tmp_intErr : Int;
+      tmp_intPoseErr : Int;
+      tmp_intActive : Int;
+      tmp_intFirst : Int;
+      tmp_intCount : Int;
+      tmp_intC : Int;
+      tmp_intH : Int;
+      tmp_intRot : Int;
+      tmp_intK : Int;
+      tmp_intKind : Int;
+      tmp_rRad : Real;
+      tmp_rAngle : Real;
+      tmp_rDirX : Real;
+      tmp_rDirY : Real;
+      tmp_rVX : Real;
+      tmp_rVY : Real;
+      tmp_rAlong : Real;
+      tmp_rAcross : Real;
+      tmp_rLength : Real;
+      tmp_rPitch : Real;
+      tmp_rPitchAbs : Real;
+      tmp_rRotZEven : Real;
+      tmp_rRotZOdd : Real;
+      tmp_rAX : Real;
+      tmp_rAY : Real;
+      tmp_rP : Real;
+      tmp_udtA0 : "UDT_Pose";
+      tmp_udtP : "UDT_Pose";
+   END_VAR
+
+   VAR CONSTANT
+      P_HOME : Int := 1;
+      P_START : Int := 2;
+      P_LINE : Int := 9;                        // the start of line 0, db_poses row 9 (corner 1 in area mode)
+      P_CORNER2 : Int := 10;                    // v0.2: the opposite corner of the area, db_poses row 10. area mode only
+      BLOCK_LIN : Int := 1;                     // program 20 block 1, linear normal
+      BLOCK_LIN_SLOW : Int := 2;                // block 2, linear slow: the scan lines and the moves down onto a line
+      ID_START : Int := 1;
+      ID_ABOVE : Int := 2;
+      ID_DOWN0 : Int := 3;
+      ID_LINE : Int := 4;
+      ID_INDEX : Int := 5;
+      ID_LIFT : Int := 6;
+      ID_TRAVEL : Int := 7;
+      ID_DOWN : Int := 8;
+      ID_LIFT_END : Int := 9;
+      ID_START2 : Int := 10;
+      ID_HOME : Int := 11;
+      MAX_LINES : Int := 5000;                  // v0.2: 50 in v0.1. the move counters are int: 4 * 5000 + 5 fits
+      QUEUE_KEEP : Int := 8;                    // push while the queue holds fewer than this. the queue takes 50
+      DEG_TO_RAD : Real := 0.017453293;         // pi / 180
+      AREA_EPS : Real := 0.01;                  // mm, so that an extent of exactly n pitches gives n + 1 lines
+   END_VAR
+
+BEGIN
+   // ---- edges and pulses -------------------------------------------------------
+   #tmp_xStartEdge := #i_xStart AND NOT #xStartOld;
+   #xStartOld := #i_xStart;
+   #tmp_xAbortEdge := #i_xAbort AND NOT #xAbortOld;
+   #xAbortOld := #i_xAbort;
+
+   #o_udtOut.xPushReq := FALSE;
+   #o_udtOut.xClear := FALSE;
+   #o_udtOut.udtState.xDone := FALSE;
+
+   // ---- abort while running: button, auto off, or the engine went into error ---------
+   IF #intStep >= 10 AND #intStep <= 30 THEN
+      IF #tmp_xAbortEdge OR NOT #i_xAuto THEN
+         #o_udtOut.xClear := TRUE;              // the running move finishes, nothing follows
+         #o_udtOut.udtState.xRunning := FALSE;
+         #intStep := 0;
+      ELSIF #i_udtMoveState.xError THEN
+         #o_udtOut.xClear := TRUE;
+         #o_udtOut.udtState.intErrId := 10;
+         #o_udtOut.udtState.intEngineErr := #i_udtMoveState.intErrId;
+         #o_udtOut.udtState.intMoveActive := #i_udtMoveState.intIdActive;
+         #intStep := 90;
+      END_IF;
+   END_IF;
+
+   CASE #intStep OF
+      0: // idle
+         #o_udtOut.udtState.xRunning := FALSE;
+         IF #tmp_xStartEdge AND #i_xAuto THEN
+            #o_udtOut.udtState.xError := FALSE;
+            #o_udtOut.udtState.intErrId := 0;
+            #o_udtOut.udtState.intEngineErr := 0;
+            #o_intLineActive := 0;
+            #intStep := 10;
+         END_IF;
+
+      10: // build the geometry and check it. nothing goes out of this block yet
+         #tmp_intErr := 0;
+         IF NOT #i_aoxValid[#P_START] OR (NOT #i_aoxValid[#P_LINE] AND NOT #i_xFromHere)
+            OR (#i_xArea AND NOT #i_aoxValid[#P_CORNER2]) THEN
+            #tmp_intErr := 1;                   // start, the line start, or corner 2 of the area not taught
+         END_IF;
+         IF #i_xFromHere AND NOT #i_xActualValid THEN
+            #tmp_intErr := 6;                   // scan from here: the actual pose is not valid
+         END_IF;
+         IF #i_rSafeZ <= 0.0 THEN
+            #tmp_intErr := 2;                   // safe z not set
+         END_IF;
+         IF #i_udtMoveState.xBusy OR #i_udtMoveState.xError THEN
+            #tmp_intErr := 3;                   // engine busy or in error
+         END_IF;
+         IF #i_rPitch = 0.0 OR #i_rLeadIn < 0.0 THEN
+            #tmp_intErr := 5;                   // pitch 0 or a negative lead-in
+         END_IF;
+         IF NOT #i_xArea AND (#i_rLength <= 0.0 OR #i_intCount < 1 OR #i_intCount > #MAX_LINES) THEN
+            #tmp_intErr := 5;                   // length 0 or the lines outside 1 .. MAX_LINES (typed mode)
+         END_IF;
+         IF #i_xArea AND #i_xIndexAlong AND #i_rLength <= 0.0 THEN
+            #tmp_intErr := 5;                   // area mode with index along: the patch length is still typed
+         END_IF;
+         IF #i_rFaceZ <> 0.0 AND #i_rZ >= #i_rFaceZ THEN
+            #tmp_intErr := 9;                   // the scan height is not above the face (smaller z is up)
+         END_IF;
+
+         IF #tmp_intErr = 0 THEN
+            // the start of line 0: the actual pose with "scan from here", else pose 9. the height is the scan height
+            IF #i_xFromHere THEN
+               #tmp_udtA0 := #i_udtActual;
+               #tmp_intFirst := 2;              // the robot stands at the start: no "to start" first
+            ELSE
+               #tmp_udtA0 := #i_aoudtP[#P_LINE];
+               #tmp_intFirst := 1;
+            END_IF;
+            #tmp_udtA0.rZ := #i_rZ;
+
+            // the line direction d from the angle
+            #tmp_rAngle := #i_rAngle;
+            #tmp_rRad := #tmp_rAngle * #DEG_TO_RAD;
+            #tmp_rDirX := COS(#tmp_rRad);
+            #tmp_rDirY := SIN(#tmp_rRad);
+
+            IF #i_xArea THEN
+               // v0.2: the area by its two corners. corner 2 relative to corner 1, split along d and across it (to the left)
+               #tmp_rVX := #i_aoudtP[#P_CORNER2].rX - #tmp_udtA0.rX;
+               #tmp_rVY := #i_aoudtP[#P_CORNER2].rY - #tmp_udtA0.rY;
+               #tmp_rAlong := #tmp_rVX * #tmp_rDirX + #tmp_rVY * #tmp_rDirY;
+               #tmp_rAcross := -#tmp_rVX * #tmp_rDirY + #tmp_rVY * #tmp_rDirX;
+               IF #tmp_rAlong < 0.0 THEN
+                  // corner 2 lies behind corner 1 along the axis: turn the axis by 180, the lines then run toward corner 2
+                  #tmp_rAngle := #tmp_rAngle + 180.0;
+                  IF #tmp_rAngle > 180.0 THEN
+                     #tmp_rAngle := #tmp_rAngle - 360.0;
+                  END_IF;
+                  #tmp_rDirX := -#tmp_rDirX;
+                  #tmp_rDirY := -#tmp_rDirY;
+                  #tmp_rAlong := -#tmp_rAlong;
+                  #tmp_rAcross := -#tmp_rAcross;
+               END_IF;
+               #tmp_rPitchAbs := ABS(#i_rPitch);
+               IF #i_xIndexAlong THEN
+                  // the patches lie along the axis from corner 1 up to corner 2, pitch apart. the patch length stays typed
+                  #tmp_rLength := #i_rLength;
+                  #tmp_rPitch := #tmp_rPitchAbs;
+                  // floor(along / pitch) + 1. real_to_int rounds, so half a step is taken off first
+                  #tmp_intCount := REAL_TO_INT((#tmp_rAlong + #AREA_EPS) / #tmp_rPitchAbs - 0.5) + 1;
+               ELSE
+                  // the lines run from corner 1 toward corner 2 along the axis; the rows walk across to corner 2
+                  #tmp_rLength := #tmp_rAlong;
+                  IF #tmp_rAcross >= 0.0 THEN
+                     #tmp_rPitch := #tmp_rPitchAbs;        // corner 2 lies to the left: the rows walk left
+                  ELSE
+                     #tmp_rPitch := -#tmp_rPitchAbs;       // to the right
+                  END_IF;
+                  #tmp_intCount := REAL_TO_INT((ABS(#tmp_rAcross) + #AREA_EPS) / #tmp_rPitchAbs - 0.5) + 1;
+               END_IF;
+               IF #tmp_rLength <= 0.0 OR #tmp_intCount < 1 THEN
+                  #tmp_intErr := 5;             // corner 2 lies on the across line of corner 1: no length along the axis
+               ELSIF #tmp_intCount > #MAX_LINES THEN
+                  #tmp_intErr := 5;             // more than MAX_LINES lines: a larger pitch
+               END_IF;
+            ELSE
+               #tmp_rLength := #i_rLength;
+               #tmp_rPitch := #i_rPitch;
+               #tmp_intCount := #i_intCount;
+            END_IF;
+         END_IF;
+
+         IF #tmp_intErr = 0 THEN
+            // the rotz of the even and the odd lines (SCAN_TYPES.md 7.5). no turn: the rotz of the start everywhere.
+            // else the tool looks along the line, and the odd line of the serpentine is turned 180 the way that
+            // stays inside -180 .. +180
+            IF #i_xNoTurn THEN
+               #tmp_rRotZEven := #tmp_udtA0.rRotZ;
+               #tmp_rRotZOdd := #tmp_udtA0.rRotZ;
+            ELSE
+               #tmp_rRotZEven := #tmp_rAngle + #i_rRotZOffset;
+               IF #tmp_rRotZEven > 180.0 THEN
+                  #tmp_rRotZEven := #tmp_rRotZEven - 360.0;
+               ELSIF #tmp_rRotZEven < -180.0 THEN
+                  #tmp_rRotZEven := #tmp_rRotZEven + 360.0;
+               END_IF;
+               IF #i_xZigzag THEN
+                  IF #tmp_rRotZEven <= 0.0 THEN
+                     #tmp_rRotZOdd := #tmp_rRotZEven + 180.0;
+                  ELSE
+                     #tmp_rRotZOdd := #tmp_rRotZEven - 180.0;
+                  END_IF;
+               ELSE
+                  #tmp_rRotZOdd := #tmp_rRotZEven;
+               END_IF;
+            END_IF;
+
+            // ---- freeze the geometry. from here on fc_linemove gives every move of the job ----
+            #udtGeo.intCount := #tmp_intCount;
+            #udtGeo.intFirst := #tmp_intFirst;
+            #udtGeo.xHome := #i_aoxValid[#P_HOME];
+            #udtGeo.xLift := #i_xLiftBetween;
+            #udtGeo.xZigzag := #i_xZigzag;
+            #udtGeo.rA0X := #tmp_udtA0.rX;
+            #udtGeo.rA0Y := #tmp_udtA0.rY;
+            #udtGeo.rRotY := #tmp_udtA0.rRotY;
+            #udtGeo.rDirX := #tmp_rDirX;
+            #udtGeo.rDirY := #tmp_rDirY;
+            IF #i_xIndexAlong THEN
+               #udtGeo.rIdxX := #tmp_rDirX;     // the next line further along the same line
+               #udtGeo.rIdxY := #tmp_rDirY;
+            ELSE
+               #udtGeo.rIdxX := -#tmp_rDirY;    // e, across the lines, to the left of d
+               #udtGeo.rIdxY := #tmp_rDirX;
+            END_IF;
+            #udtGeo.rPitch := #tmp_rPitch;
+            #udtGeo.rLength := #tmp_rLength;
+            #udtGeo.rLeadIn := #i_rLeadIn;
+            #udtGeo.rZ := #i_rZ;
+            #udtGeo.rSafeZ := #i_rSafeZ;
+            IF #i_rLiftZ <> 0.0 THEN
+               #udtGeo.rLiftZ := #i_rLiftZ;
+            ELSE
+               #udtGeo.rLiftZ := #i_rSafeZ;
+            END_IF;
+            #udtGeo.rRotZEven := #tmp_rRotZEven;
+            #udtGeo.rRotZOdd := #tmp_rRotZOdd;
+            #udtGeo.udtPStart := #i_aoudtP[#P_START];
+            #udtGeo.udtPHome := #i_aoudtP[#P_HOME];
+            IF #i_xLiftBetween THEN
+               #udtGeo.intMoves := 3 + (#tmp_intCount - 1) * 4 + 2;
+            ELSE
+               #udtGeo.intMoves := 3 + (#tmp_intCount - 1) * 2 + 2;
+            END_IF;
+            IF #tmp_intFirst = 1 THEN
+               #udtGeo.intMoves := #udtGeo.intMoves + 1;
+            END_IF;
+            IF #udtGeo.xHome THEN
+               #udtGeo.intMoves := #udtGeo.intMoves + 1;
+            END_IF;
+
+            // ---- the check before the first push, rule 9, without a list. every computed point of the job
+            // lies inside the parallelogram of the four outer line ends: line 0 and line n-1, each from
+            // -leadin to length + leadin along d. the limits are a box, so the four corners decide, at
+            // every height the job uses (scan, safe, lift) and with both rotz values. then pose 2 and pose 1.
+            // error 4 names the kind of the failing height (4 line, 2 above, 6 lift) and the line (0 or n-1)
+            #tmp_udtP.rRotY := #udtGeo.rRotY;
+            FOR #tmp_intC := 1 TO 4 DO
+               IF #tmp_intC <= 2 THEN
+                  #tmp_intK := 0;
+               ELSE
+                  #tmp_intK := #tmp_intCount - 1;
+               END_IF;
+               IF #tmp_intC = 1 OR #tmp_intC = 3 THEN
+                  #tmp_rAlong := -#i_rLeadIn;
+               ELSE
+                  #tmp_rAlong := #tmp_rLength + #i_rLeadIn;
+               END_IF;
+               #tmp_rAX := #udtGeo.rA0X + INT_TO_REAL(#tmp_intK) * #udtGeo.rPitch * #udtGeo.rIdxX;
+               #tmp_rAY := #udtGeo.rA0Y + INT_TO_REAL(#tmp_intK) * #udtGeo.rPitch * #udtGeo.rIdxY;
+               #tmp_udtP.rX := #tmp_rAX + #tmp_rAlong * #udtGeo.rDirX;
+               #tmp_udtP.rY := #tmp_rAY + #tmp_rAlong * #udtGeo.rDirY;
+               FOR #tmp_intH := 1 TO 3 DO
+                  IF #tmp_intH = 1 THEN
+                     #tmp_udtP.rZ := #udtGeo.rZ;
+                     #tmp_intKind := #ID_LINE;
+                  ELSIF #tmp_intH = 2 THEN
+                     #tmp_udtP.rZ := #udtGeo.rSafeZ;
+                     #tmp_intKind := #ID_ABOVE;
+                  ELSE
+                     #tmp_udtP.rZ := #udtGeo.rLiftZ;
+                     #tmp_intKind := #ID_LIFT;
+                  END_IF;
+                  IF #tmp_intH <> 3 OR #udtGeo.xLift THEN
+                     FOR #tmp_intRot := 1 TO 2 DO
+                        IF #tmp_intRot = 1 THEN
+                           #tmp_udtP.rRotZ := #udtGeo.rRotZEven;
+                        ELSE
+                           #tmp_udtP.rRotZ := #udtGeo.rRotZOdd;
+                        END_IF;
+                        #tmp_intPoseErr := "FC_PoseCheck"(i_udtPose := #tmp_udtP);
+                        IF #tmp_intPoseErr <> 0 AND #tmp_intErr = 0 THEN
+                           #tmp_intErr := 4;    // a point of the job is outside the limits
+                           #o_udtOut.udtState.intMoveActive := #tmp_intKind;
+                           #o_intLineActive := #tmp_intK;
+                        END_IF;
+                     END_FOR;
+                  END_IF;
+               END_FOR;
+            END_FOR;
+            IF #tmp_intErr = 0 AND #tmp_intFirst = 1 THEN
+               IF "FC_PoseCheck"(i_udtPose := #udtGeo.udtPStart) <> 0 THEN
+                  #tmp_intErr := 4;
+                  #o_udtOut.udtState.intMoveActive := #ID_START;
+                  #o_intLineActive := 0;
+               END_IF;
+            ELSIF #tmp_intErr = 0 THEN
+               IF "FC_PoseCheck"(i_udtPose := #udtGeo.udtPStart) <> 0 THEN
+                  #tmp_intErr := 4;
+                  #o_udtOut.udtState.intMoveActive := #ID_START2;
+                  #o_intLineActive := 0;
+               END_IF;
+            END_IF;
+            IF #tmp_intErr = 0 AND #udtGeo.xHome THEN
+               IF "FC_PoseCheck"(i_udtPose := #udtGeo.udtPHome) <> 0 THEN
+                  #tmp_intErr := 4;
+                  #o_udtOut.udtState.intMoveActive := #ID_HOME;
+                  #o_intLineActive := 0;
+               END_IF;
+            END_IF;
+         END_IF;
+
+         IF #tmp_intErr <> 0 THEN
+            #o_udtOut.udtState.intErrId := #tmp_intErr;
+            #intStep := 90;
+         ELSE
+            #o_udtOut.xClear := TRUE;           // whatever was left in the queue goes
+            #intPushIdx := 1;
+            #o_udtOut.udtState.intMovesTotal := #udtGeo.intMoves;
+            #o_udtOut.udtState.intMovesDone := 0;
+            #o_udtOut.udtState.intMoveActive := 0;
+            #o_intLineActive := 0;
+            #o_intLineCount := #udtGeo.intCount;
+            #o_udtOut.udtState.xRunning := TRUE;
+            #intStep := 20;
+         END_IF;
+
+      20: // push while the queue has room, one entry per cycle. the engine already runs the first ones
+         IF #i_intQueueCount < #QUEUE_KEEP THEN
+            "FC_LineMove"(i_udtGeo := #udtGeo,
+                          i_intIdx := #intPushIdx,
+                          o_intKind => #tmp_intKind,
+                          o_intK => #tmp_intK,
+                          o_udtPose => #tmp_udtP);
+            IF #tmp_intKind = #ID_DOWN0 OR #tmp_intKind = #ID_LINE OR #tmp_intKind = #ID_DOWN THEN
+               #o_udtOut.udtPush.intBlock := #BLOCK_LIN_SLOW;
+            ELSE
+               #o_udtOut.udtPush.intBlock := #BLOCK_LIN;
+            END_IF;
+            #o_udtOut.udtPush.udtPose := #tmp_udtP;
+            #o_udtOut.udtPush.udtPose2 := #tmp_udtP;
+            #o_udtOut.udtPush.rBlend := 0.0;
+            #o_udtOut.udtPush.aorPar[1] := 0.0;
+            #o_udtOut.udtPush.aorPar[2] := 0.0;
+            #o_udtOut.udtPush.aorPar[3] := 0.0;
+            #o_udtOut.udtPush.intOverride := #i_intOverride;
+            #o_udtOut.udtPush.xStopOnSensor := FALSE;
+            #o_udtOut.udtPush.intId := #tmp_intKind;
+            #o_udtOut.udtPush.intPathLen := 0;    // a single move, always
+            #o_udtOut.xPushReq := TRUE;
+            #intPushIdx := #intPushIdx + 1;
+            IF #intPushIdx > #udtGeo.intMoves THEN
+               #intStep := 30;
+            END_IF;
+         END_IF;
+
+      30: // run out. everything is pushed, the engine eats the rest
+         IF #i_intQueueCount = 0 AND NOT #i_udtMoveState.xBusy AND NOT #i_udtMoveState.xDone THEN
+            #o_udtOut.udtState.xRunning := FALSE;
+            #o_udtOut.udtState.xDone := TRUE;
+            #intStep := 0;
+         END_IF;
+
+      90: // error. stays until abort or the next start
+         #o_udtOut.udtState.xRunning := FALSE;
+         #o_udtOut.udtState.xError := TRUE;
+         IF #tmp_xAbortEdge THEN
+            #o_udtOut.udtState.xError := FALSE;
+            #o_udtOut.udtState.intErrId := 0;
+            #intStep := 0;
+         END_IF;
+   END_CASE;
+
+   // ---- counting, steps 20 and 30. the moves run in the order of the list, so the active move is
+   // the one after the finished ones. the kind comes from the engine's id, the line from fc_linemove
+   IF #intStep = 20 OR #intStep = 30 THEN
+      IF #i_udtMoveState.xDone THEN
+         #o_udtOut.udtState.intMovesDone := #o_udtOut.udtState.intMovesDone + 1;
+      END_IF;
+      IF #i_udtMoveState.xBusy THEN
+         #o_udtOut.udtState.intMoveActive := #i_udtMoveState.intIdActive;
+         #tmp_intActive := #o_udtOut.udtState.intMovesDone + 1;
+         IF #tmp_intActive >= 1 AND #tmp_intActive <= #udtGeo.intMoves THEN
+            "FC_LineMove"(i_udtGeo := #udtGeo,
+                          i_intIdx := #tmp_intActive,
+                          o_intKind => #tmp_intKind,
+                          o_intK => #tmp_intK,
+                          o_udtPose => #tmp_udtP);
+            #o_intLineActive := #tmp_intK;
+         END_IF;
+      END_IF;
+   END_IF;
+
+   // ---- the window bit: a line move runs and the actual x y lie inside the patch of that line.
+   // the patch is the segment a_k .. a_k + length * d, the same for both directions. the actual pose is the
+   // setpoint pose of the bus (pi 7 .. 11), late by one bus cycle; the lead-in covers that (SCAN_TYPES.md 3.2)
+   #o_xScanWindow := FALSE;
+   IF (#intStep = 20 OR #intStep = 30) AND #i_udtMoveState.xBusy AND #i_xActualValid
+      AND #i_udtMoveState.intIdActive = #ID_LINE
+      AND #o_intLineActive >= 0 AND #o_intLineActive < #udtGeo.intCount THEN
+      #tmp_rAX := #udtGeo.rA0X + INT_TO_REAL(#o_intLineActive) * #udtGeo.rPitch * #udtGeo.rIdxX;
+      #tmp_rAY := #udtGeo.rA0Y + INT_TO_REAL(#o_intLineActive) * #udtGeo.rPitch * #udtGeo.rIdxY;
+      #tmp_rP := (#i_udtActual.rX - #tmp_rAX) * #udtGeo.rDirX
+               + (#i_udtActual.rY - #tmp_rAY) * #udtGeo.rDirY;
+      #o_xScanWindow := #tmp_rP >= 0.0 AND #tmp_rP <= #udtGeo.rLength;
+   END_IF;
+
+   #o_udtOut.udtState.intStep := #intStep;
+
+   // job error numbers (the numbers of the cube and the drum job, plus 9)
+   //  1 start (pose 2), the line start (pose 9), or corner 2 (pose 10, area mode) not taught
+   //  2 safe z not set                                           4 a point of the job is outside the limits: intMoveActive = the kind, o_intLineActive = the line
+   //  3 engine busy or in error at start                         5 length 0, pitch 0, lines outside 1 .. 5000, lead-in negative;
+   //  6 scan from here not possible: not referenced or comm not ok    area mode: corner 2 gives no length, or more than 5000 lines
+   //  9 the scan height is not above the face (rFaceZ set and rZ >= rFaceZ; smaller z is up)
+   // 10 the engine went into error, see intEngineErr
+   // the engine needs "DB_RobotMove".Cfg.intBlocksInPrg20 >= 2; 4 is in since the drum. nothing else on the robot
+END_FUNCTION_BLOCK

@@ -1,0 +1,143 @@
+FUNCTION_BLOCK "FB_ActRobot"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// stage 2 step 9. NOT FOR TOMORROW. needs the stepchain framework in the project.
+//
+// turns a robot step number of the chain into one move request, and gives back the
+// finished bit, the same way the ram networks do it:
+//    command while the step is active, finished bit until the pointer moves on.
+// one block for all robot step numbers, instead of one network per number.
+//
+// step numbers (goals.md 4.2):
+//    301..350   linear to pose n, n = step - 300, from db_poses
+//    351        lift: actual pose with z = safe z
+//
+// wiring that is still open (fc_seqmngmt / fc_seqtransitions are not in the folder):
+//    o_xStepFinished must go where "DB_RamUp".xAutoStep138Finished goes today.
+//    only one block may push into the queue: when this one is used, fb_scancubejob is
+//    not called, or the recipe of the chain replaces it.
+   VAR_INPUT
+      i_intActStepNr : Int;                     // "DB_SeqMngmt".intActStepNr
+      i_xChainRuns : Bool;                      // the chain engine runs
+      i_xAuto : Bool;                           // auto mode bit
+      i_intOverride : Int;
+      i_aoudtP : Array[1..50] of "UDT_Pose";    // "DB_Poses".aoudtP
+      i_aoxValid : Array[1..50] of Bool;        // "DB_Poses".aoxValid
+      i_rSafeZ : Real;                          // "DB_Poses".rSafeZ
+      i_udtActual : "UDT_Pose";                 // "DB_Robot".Status.udtPoseBcs, for 351
+      i_udtMoveState : "UDT_MoveState";         // "DB_RobotMove".State
+   END_VAR
+
+   VAR_OUTPUT
+      o_xPushReq : Bool;                        // => "DB_RobotJob".Push.xReq
+      o_udtPush : "UDT_MoveReq";                // => "DB_RobotJob".Push.udtMove
+      o_xClear : Bool;                          // => "DB_RobotJob".Push.xClear
+      o_xStepFinished : Bool;                   // the finished bit of the active robot step
+      o_intStepNr : Int;                        // the robot step served now, 0 = none
+      o_xError : Bool;
+      o_intErrId : Int;                         // 1 pose not taught, 2 safe z not set, 4 pose outside limits, 10 engine error
+   END_VAR
+
+   VAR
+      intStepOld : Int;
+      intState : Int;                           // 0 wait, 10 pushed, 20 finished, 90 error
+   END_VAR
+
+   VAR_TEMP
+      tmp_xRobotStep : Bool;
+      tmp_intPose : Int;
+      tmp_udtPose : "UDT_Pose";
+      tmp_intErr : Int;
+   END_VAR
+
+   VAR CONSTANT
+      STEP_LIN_FIRST : Int := 301;
+      STEP_LIN_LAST : Int := 350;
+      STEP_LIFT : Int := 351;
+      BLOCK_LIN : Int := 1;
+   END_VAR
+
+BEGIN
+   #o_xPushReq := FALSE;
+   #o_xClear := FALSE;
+
+   // the pointer moved: everything of the old step is over
+   IF #i_intActStepNr <> #intStepOld THEN
+      #intStepOld := #i_intActStepNr;
+      #o_xStepFinished := FALSE;
+      #o_xError := FALSE;
+      #o_intErrId := 0;
+      #intState := 0;
+   END_IF;
+
+   #tmp_xRobotStep := (#i_intActStepNr >= #STEP_LIN_FIRST AND #i_intActStepNr <= #STEP_LIN_LAST)
+                      OR #i_intActStepNr = #STEP_LIFT;
+   IF #tmp_xRobotStep THEN
+      #o_intStepNr := #i_intActStepNr;
+   ELSE
+      #o_intStepNr := 0;
+   END_IF;
+
+   CASE #intState OF
+      0: // wait for a robot step with the chain running
+         IF #tmp_xRobotStep AND #i_xChainRuns AND #i_xAuto
+            AND NOT #i_udtMoveState.xBusy AND NOT #i_udtMoveState.xError THEN
+            #tmp_intErr := 0;
+            IF #i_intActStepNr = #STEP_LIFT THEN
+               #tmp_udtPose := #i_udtActual;
+               #tmp_udtPose.rZ := #i_rSafeZ;
+               IF #i_rSafeZ <= 0.0 THEN
+                  #tmp_intErr := 2;
+               END_IF;
+            ELSE
+               #tmp_intPose := #i_intActStepNr - 300;      // 1..50 by construction
+               IF #i_aoxValid[#tmp_intPose] THEN
+                  #tmp_udtPose := #i_aoudtP[#tmp_intPose];
+               ELSE
+                  #tmp_intErr := 1;
+               END_IF;
+            END_IF;
+            IF #tmp_intErr = 0 THEN
+               IF "FC_PoseCheck"(i_udtPose := #tmp_udtPose) <> 0 THEN
+                  #tmp_intErr := 4;
+               END_IF;
+            END_IF;
+
+            IF #tmp_intErr <> 0 THEN
+               #o_intErrId := #tmp_intErr;
+               #o_xError := TRUE;
+               #intState := 90;
+            ELSE
+               #o_udtPush.intBlock := #BLOCK_LIN;
+               #o_udtPush.udtPose := #tmp_udtPose;
+               #o_udtPush.udtPose2 := #tmp_udtPose;
+               #o_udtPush.rBlend := 0.0;
+               #o_udtPush.aorPar[1] := 0.0;
+               #o_udtPush.aorPar[2] := 0.0;
+               #o_udtPush.aorPar[3] := 0.0;
+               #o_udtPush.intOverride := #i_intOverride;
+               #o_udtPush.xStopOnSensor := FALSE;
+               #o_udtPush.intId := #i_intActStepNr;
+               #o_xPushReq := TRUE;
+               #intState := 10;
+            END_IF;
+         END_IF;
+
+      10: // pushed. wait for the engine to finish this id
+         IF #i_udtMoveState.xDone AND #i_udtMoveState.intIdActive = #i_intActStepNr THEN
+            #o_xStepFinished := TRUE;
+            #intState := 20;
+         ELSIF #i_udtMoveState.xError THEN
+            #o_intErrId := 10;
+            #o_xError := TRUE;
+            #o_xClear := TRUE;
+            #intState := 90;
+         END_IF;
+
+      20: // finished. hold the bit until the pointer moves
+         ;
+
+      90: // error. hold until the pointer moves
+         ;
+   END_CASE;
+END_FUNCTION_BLOCK

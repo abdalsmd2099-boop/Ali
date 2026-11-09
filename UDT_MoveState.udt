@@ -1,0 +1,20 @@
+TYPE "UDT_MoveState"
+VERSION : 0.2
+// what fb_robotmove reports. written only by fb_robotmove, read by hmi, queue and step chain.
+// v0.2 (2026-11-03): xPrgStop at the end, read by ob30 nw2 on the stop pin of the module 1 fb.
+// rule: a new field goes at the end. existing names never change.
+   STRUCT
+      xBusy : Bool;                   // a move is in progress
+      xDone : Bool;                   // one cycle pulse at the end of a good move
+      xError : Bool;                  // stays until reset
+      intErrId : Int;                 // error number, goals.md section 5.5
+      intStep : Int;                  // internal step 0..90, for the hmi
+      intRunNr : Int;                 // run number of the last move, echoed by the robot in real[72]
+      intIdActive : Int;              // intId of the move in progress or last done
+      intBlockActive : Int;           // block in progress or last done
+      udtPoseAtEnd : "UDT_Pose";      // actual pose when the move ended or was stopped (later: at the sensor stop)
+      uiMsgIdAtError : UInt;          // robot message id at the moment of the error, 0 = none
+      xPrgStop : Bool;                // v0.2: program stop to the robot, true in step 15 only. ob30 nw2: stop := Cmd.Stop OR this
+   END_STRUCT;
+
+END_TYPE

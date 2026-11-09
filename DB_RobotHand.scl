@@ -1,0 +1,78 @@
+DATA_BLOCK "DB_RobotHand"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.2
+// v0.2 (2026-11-05): Btn.xResetRobot at the end of Btn, the old screen's reset button moves to it
+// (FB_MachineReady v0.2, pin ResetReq). the screen no longer writes "DB_App".Cmd.Reset itself.
+// hand screen: jog and home requests from the hmi, permissions from the ob1 hand networks.
+// 2026-11-01, for the ladder of SCREENS.html section 5. not in tia, not needed for the cube.
+// writers:  hmi -> Jog.*, Home.xX .. xRotY      ob1 hand networks -> the rest
+//
+// the rungs (one set of 3, 4, 5 per axis):
+//    1  xRobotManual := Status.xCommOK AND xReady AND NOT xFault AND xAccessGranted AND NOT xAutomatic
+//    2  xHandOK      := Man.xEnable AND NOT Man.xAuto AND NOT State.xBusy AND NOT Status.xRefMode AND xRobotManual
+//    3  Cmd.Jog_Pos_X := xHandOK AND Jog.xXPos AND NOT Jog.xXNeg
+//    4  Cmd.Jog_Neg_X := xHandOK AND Jog.xXNeg AND NOT Jog.xXPos
+//    5  Cmd.Home_X1   := TP 500 ms of (xHandOK AND edge(Home.xX) AND NOT Status.xMoving)
+// when these rungs are in ob1 they are the one writer of Cmd.Jog_* and Cmd.Home_*:
+// the old screen buttons must then write Jog.* and Home.* here, not DB_App.Cmd.
+NON_RETAIN
+   VAR
+      Jog : STRUCT                       // hmi momentary buttons: press 1, release 0
+         xXPos : Bool;                   // joint 1
+         xXNeg : Bool;
+         xYPos : Bool;                   // joint 2
+         xYNeg : Bool;
+         xZPos : Bool;                   // joint 3
+         xZNeg : Bool;
+         xRotZPos : Bool;                // joint 4, r1
+         xRotZNeg : Bool;
+         xRotYPos : Bool;                // joint 5, r2
+         xRotYNeg : Bool;
+      END_STRUCT;
+
+      Home : STRUCT                      // hmi momentary buttons, one press = one referencing start
+         xX : Bool;
+         xY : Bool;
+         xZ : Bool;
+         xRotZ : Bool;
+         xRotY : Bool;
+         xXEdge : Bool;                  // edge memories of the p contacts, rung 5
+         xYEdge : Bool;
+         xZEdge : Bool;
+         xRotZEdge : Bool;
+         xRotYEdge : Bool;
+      END_STRUCT;
+
+      xRobotManual : Bool;               // rung 1: robot healthy and in manual
+      xHandOK : Bool;                    // rung 2: hand actions allowed. hmi: jog and home buttons grey when false
+
+      tpHomeX : TP_TIME;                 // rung 5: the 500 ms start pulses, one per axis
+      tpHomeY : TP_TIME;
+      tpHomeZ : TP_TIME;
+      tpHomeRotZ : TP_TIME;
+      tpHomeRotY : TP_TIME;
+
+      Btn : STRUCT                       // the cube box of the automatic screen, hmi momentary buttons (2026-11-03)
+         xTeachHome : Bool;              // TEACH HOME: press 1, release 0
+         xTeachStart : Bool;             // TEACH START
+         xTeachC1 : Bool;                // TEACH CORNER 1
+         xTeachNr : Bool;                // the generic TEACH button, teaches row intPoseNr
+         xClearNr : Bool;                // the generic CLEAR button
+         intPoseNr : Int := 1;           // the pose nr field, 1..50
+         xGoStart : Bool;                // GO TO START
+         xGoC1 : Bool;                   // GO TO CORNER 1
+         xAck : Bool;                    // ACK: engine reset and job abort together
+         xResetRobot : Bool;             // v0.2: RESET of the robot fault, momentary. FB_MachineReady ResetReq
+      END_STRUCT;
+
+      Lamp : STRUCT                      // from fb_cubebuttons, for the screen. one writer: fb_cubebuttons
+         xTeachAllowed : Bool;           // enables the teach buttons: enable on, auto off, engine idle
+         xGoAllowed : Bool;              // enables the go to buttons, the same
+         xCubeReady : Bool;              // home, start and corner 1 taught
+         xComputed : Bool;               // length and width > 0: the text "computed from corner 1"
+      END_STRUCT;
+   END_VAR
+
+BEGIN
+
+END_DATA_BLOCK

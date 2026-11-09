@@ -1,0 +1,85 @@
+// =============================================================================
+// OB30   NETWORK 3   -   MODULE 2 call, for FB v0.7
+//
+// replaces network 3. networks 1 (handshake), 2 (module 1) and 4
+// (FC_RobotStatusMap) do not change.
+//
+// PO block 2 after the movisuite change of 15 Oct 2026:
+//
+//    word       index   content
+//    65..113     1..49   segments 8..14   (word 65 also carries the handshake)
+//    114..118   50..54   POSE 51   X Y Z RotZ RotY
+//    119..122   55..58   SRL Real 51..54
+//    123           59    setpoint bools 1..8
+//
+// PI block 2, unchanged:
+//    65..80      1..16   SRL Real 71..86
+//    81            17    SRL Bools
+// =============================================================================
+
+"DB_MOVIKIT_ROBOTICS_Module2"(HW_Identifier_M2 := 272,      // slot 19, unchanged
+                              enable           := TRUE,
+                              handshake_in     := "DB_App".HS,
+                              SrlFirstWord     := 1,        // PI 65 = SRL Real 71
+                              HandshakeWord    := 1,        // PO 65, bit 15
+                              SrlDivisor       := 1.0,      // 0 decimal places
+
+                              // ---- bools the ROBOT sends (read) ------------
+                              // config shows "PI 81 SRL Bools".  81 - 64 = 17.
+                              BoolWord         := 17,
+
+                              // ---- segments 8..14 -------------------------
+                              // they exist (wizard: 7 + 7 = 14) but nothing
+                              // feeds them yet. FALSE keeps them zeroed, which
+                              // is what every earlier version did.
+                              SegEnable        := FALSE,
+                              SegFirstWord     := 1,
+
+                              // ---- POSE 51, the arc endpoint --------------
+                              PoseEnable       := TRUE,
+                              PoseFirstWord    := 50,       // -> words 114..118
+                              PoseX            := "DB_App".Srl.Pose[1],
+                              PoseY            := "DB_App".Srl.Pose[2],
+                              PoseZ            := "DB_App".Srl.Pose[3],
+                              PoseRotZ         := "DB_App".Srl.Pose[4],
+                              PoseRotY         := "DB_App".Srl.Pose[5],
+
+                              // ---- the gate bools -------------------------
+                              BoolWriteEnable  := "DB_App".Srl.GateEnable,
+                              BoolWriteWord    := 59,       // -> word 123
+                              WrBool1 := "DB_App".Srl.Gate[1],
+                              WrBool2 := "DB_App".Srl.Gate[2],
+                              WrBool3 := "DB_App".Srl.Gate[3],
+                              WrBool4 := "DB_App".Srl.Gate[4],
+                              WrBool5 := "DB_App".Srl.Gate[5],
+                              WrBool6 := "DB_App".Srl.Gate[6],
+                              WrBool7 := "DB_App".Srl.Gate[7],
+                              WrBool8 := "DB_App".Srl.Gate[8],
+
+                              // ---- the setpoint reals ---------------------
+                              // CHANGED 50 -> 55. the pose pushed them along.
+                              ParamWriteEnable := TRUE,
+                              ParamFirstWord   := 55,       // -> word 119
+                              ParamWordSize    := 1,
+                              ParamCount       := 4,
+                              ParamMultiplier  := 1.0,
+
+                              Param1 := "DB_App".Srl.Par[1],   // SRL Real 51  arc RADIUS
+                              Param2 := "DB_App".Srl.Par[2],   // SRL Real 52  spare
+                              Param3 := "DB_App".Srl.Par[3],   // SRL Real 53  spare
+                              Param4 := "DB_App".Srl.Par[4],   // SRL Real 54  spare
+
+                              // ---- outputs --------------------------------
+                              SrlBool1         => "DB_App".Srl.In[1],   // word 81 bit 0
+                              SrlBool2         => "DB_App".Srl.In[2],   // word 81 bit 1
+                              SrlBool3         => "DB_App".Srl.In[3],   // bit 2, real once count = 4
+                              SrlBool4         => "DB_App".Srl.In[4],   // bit 3, real once count = 4
+
+                              Communication_OK => "DB_App".Srl.CommOK);
+
+// handshake_out of module 2 is always FALSE by design. leave it unconnected.
+//
+// Param1_fb..16_fb and SrlRealRaw stay unwired - read them out of the
+// instance DB where the hmi or OB1 needs them:
+//    "DB_MOVIKIT_ROBOTICS_Module2".SrlRealRaw[1]      SRL Real 71
+//    "DB_MOVIKIT_ROBOTICS_Module2".Param1_fb          the same, scaled

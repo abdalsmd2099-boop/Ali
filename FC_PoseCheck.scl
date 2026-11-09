@@ -1,0 +1,43 @@
+FUNCTION "FC_PoseCheck" : Int
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// checks one pose against the machine limits of goals.md section 1.4.
+// pure function, writes nothing.
+// return value = error number of goals.md section 5.5:
+//    0  pose is inside the limits
+//    2  x, y or z outside
+//    3  rotz or roty outside
+// the limits are constants on purpose. nobody changes them from the hmi.
+// a new limit is a change in this block and in goals.md, with a date.
+   VAR_INPUT
+      i_udtPose : "UDT_Pose";
+   END_VAR
+
+   VAR CONSTANT
+      X_MIN : Real := 0.0;       // mm
+      X_MAX : Real := 4380.0;
+      Y_MIN : Real := 0.0;       // mm, tcp page 4230, joint 2 page 4320. the smaller one
+      Y_MAX : Real := 4230.0;
+      Z_MIN : Real := -10.0;     // mm
+      Z_MAX : Real := 1908.0;
+      ROTZ_MIN : Real := -180.0; // deg
+      ROTZ_MAX : Real := 180.0;
+      ROTY_MIN : Real := -10.0;  // deg, joint 5 limit, the safer one
+      ROTY_MAX : Real := 10.0;
+   END_VAR
+
+BEGIN
+   #FC_PoseCheck := 0;
+
+   // translation
+   IF #i_udtPose.rX < #X_MIN OR #i_udtPose.rX > #X_MAX
+      OR #i_udtPose.rY < #Y_MIN OR #i_udtPose.rY > #Y_MAX
+      OR #i_udtPose.rZ < #Z_MIN OR #i_udtPose.rZ > #Z_MAX THEN
+      #FC_PoseCheck := 2;
+
+   // rotation
+   ELSIF #i_udtPose.rRotZ < #ROTZ_MIN OR #i_udtPose.rRotZ > #ROTZ_MAX
+      OR #i_udtPose.rRotY < #ROTY_MIN OR #i_udtPose.rRotY > #ROTY_MAX THEN
+      #FC_PoseCheck := 3;
+   END_IF;
+END_FUNCTION

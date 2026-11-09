@@ -1,0 +1,66 @@
+FUNCTION_BLOCK "FB_RobotMode"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// 2026-11-02. the plc sets the robot's operating mode, the operator does not touch it any more.
+// manual 6.1.1: jog and referencing are possible only in manual, a program start from the plc
+// runs only in automatic. before this block the old screen switch did it by hand, and a move
+// after a jog gave engine error 5 (robot not in automatic).
+//
+// the one writer of "DB_App".Cmd.Automatic (po 2.0), through io_xAutomatic. the old screen
+// switch on that tag must go, a lamp on "DB_Robot".Status.xAutomatic shows the real mode.
+//
+// rule: automatic is the rest state.
+//    to manual     when a jog or home command is set, our auto switch is off, the engine is
+//                  not busy and no program runs. a jog pressed during a move does nothing.
+//    to automatic  t_back after the last jog or home command fell, the robot stands still and
+//                  is not referencing. the half second lets the jog deceleration finish before
+//                  the mode changes.
+//
+// runs in ob1 after network 8 (enable), before the teach network. instance "IDB_RobotMode".
+// i_xJogWanted is the or of all jog and home commands and of your homing helper "DB_App".Home.active,
+// drawn as parallel contacts in front of the pin, see OB1_Stage2_call.scl.
+
+   VAR_INPUT
+      i_xJogWanted : Bool;               // any jog or home command of the hand screen is set
+      i_xAuto : Bool;                    // "DB_RobotJob".Man.xAuto. manual is never entered in auto
+      i_xEngineBusy : Bool;              // "DB_RobotMove".State.xBusy
+      i_udtStatus : "UDT_RobotStatus";   // "DB_Robot".Status
+   END_VAR
+
+   VAR_OUTPUT
+      o_xManual : Bool;                  // manual wanted, for a lamp. may stay open
+   END_VAR
+
+   VAR_IN_OUT
+      io_xAutomatic : Bool;              // "DB_App".Cmd.Automatic, po 2.0
+   END_VAR
+
+   VAR
+      xManualWanted : Bool;
+      tonBack : TON_TIME;
+   END_VAR
+
+   VAR CONSTANT
+      T_BACK : Time := T#500ms;          // standstill after the last jog before automatic comes back
+   END_VAR
+
+BEGIN
+   // ---- to manual: a jog or home is wanted and nothing of ours moves ----------------
+   IF #i_xJogWanted AND NOT #i_xAuto AND NOT #i_xEngineBusy AND NOT #i_udtStatus.xPrgRunning THEN
+      #xManualWanted := TRUE;
+   END_IF;
+
+   // ---- back to automatic: nothing wanted, robot standing, not referencing, for t_back ----
+   #tonBack(IN := NOT #i_xJogWanted AND NOT #i_udtStatus.xMoving AND NOT #i_udtStatus.xRefMode,
+            PT := #T_BACK);
+   IF #tonBack.Q THEN
+      #xManualWanted := FALSE;
+   END_IF;
+
+   #io_xAutomatic := NOT #xManualWanted;
+   #o_xManual := #xManualWanted;
+
+   // what you see: jog button pressed -> robotmonitor "manual with high speed" within one cycle,
+   // the axis moves. button released -> half a second later "automatic". move and start work
+   // without touching anything. a move inside that half second gives error 5: reset, move again.
+END_FUNCTION_BLOCK

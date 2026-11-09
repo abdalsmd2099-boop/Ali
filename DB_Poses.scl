@@ -1,0 +1,32 @@
+DATA_BLOCK "DB_Poses"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// taught poses of the gantry. retentive, so they survive power off.
+// written by fb_teach (the teach button) and by the hmi pose fields (typing).
+// this is the db as it is in the plc. it does not change any more: new numbers (cube size,
+// drum settings) live in "DB_Recipe", so a download never touches the taught poses (2026-11-02).
+//
+// fixed indexes for the cube job (goals.md section 3):
+//    1  P_Home        parking pose
+//    2  P_Start       start pose at safe height
+//    3  P_Approach    above / in front of the cube. not needed when the cube is given by its dimensions
+//    4  P_C1          corner 1 = the reference corner. with angle 0 the corner with the smallest x and y
+//    5  P_C2          corner 2   } taught only when "DB_Recipe".Cube.rLength or .rWidth is 0
+//    6  P_C3          corner 3   }
+//    7  P_C4          corner 4   }
+//    8  P_DrumCenter  tool above the drum axis, any height. only x, y, roty are used (2026-10-31)
+//    9  P_LineStart   start of line 0 of the line scan (fb_scanlinejob, job 3), any height: x, y, rotz, roty
+//                    are used, the height is "DB_Recipe".Line.rZ (2026-11-09, comment only, no download).
+//                    corner 1 of the area in area mode
+//   10  P_LineCorner2 the opposite corner of the area, area mode of the line scan only ("DB_Recipe".Line.xArea,
+//                    fb_scanlinejob v0.2, 2026-11-09, comment only): x and y are used, any height, any rotz
+//   11..50           free, stage 3 action 301..350 = linear to pose n
+   VAR RETAIN
+      aoudtP : Array[1..50] of "UDT_Pose";   // the poses
+      aoxValid : Array[1..50] of Bool;        // true = pose n was taught or typed, may be used
+      rSafeZ : Real;                          // mm, lift height for the retract move (action 351)
+   END_VAR
+
+BEGIN
+
+END_DATA_BLOCK

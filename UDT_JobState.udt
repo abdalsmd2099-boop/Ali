@@ -1,0 +1,17 @@
+TYPE "UDT_JobState"
+VERSION : 0.1
+// what a job block reports (scan cube today, drum later). one type for every job.
+// rule: a new field goes at the end. existing names never change.
+   STRUCT
+      xRunning : Bool;            // the job is pushing or waiting for the queue
+      xDone : Bool;               // one cycle pulse, the last move is done
+      xError : Bool;              // stays until the next start or abort
+      intErrId : Int;             // job error number, see fb_scancubejob
+      intStep : Int;              // job step: 0 idle, 10 build, 20 push, 30 run, 90 error
+      intMovesTotal : Int;        // moves in this job
+      intMovesDone : Int;         // moves finished so far
+      intMoveActive : Int;        // list index of the move the engine runs now (or the bad one at error 4)
+      intEngineErr : Int;         // the engine error number when intErrId = 10
+   END_STRUCT;
+
+END_TYPE

@@ -1,0 +1,57 @@
+FUNCTION "FC_JobMux" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.2
+// 2026-10-31. the job blocks, one queue. this is the one writer of "DB_RobotJob".Push and .State:
+// it copies the output of the active job. ob1: after the job boxes, before fb_movequeue.
+// the active job follows Man.intJob (1 cube, 2 drum, 3 line) only while no job runs, so a change
+// of the selector during a scan does nothing until the scan is over.
+//
+// v0.2 (2026-11-09): third job, the line scan. one new input at the end, i_udtLine, intJob 3.
+// 1 and 2 unchanged.
+   VAR_INPUT
+      i_intJob : Int;                       // "DB_RobotJob".Man.intJob, hmi. 1 cube, 2 drum, 3 line
+      i_udtCube : "UDT_JobOut";             // "DB_RobotJob".Cube, from fb_scancubejob
+      i_udtDrum : "UDT_JobOut";             // "DB_RobotJob".Drum, from fb_scandrumjob
+      i_udtLine : "UDT_JobOut";             // "DB_RobotJob".Line, from fb_scanlinejob   (v0.2)
+   END_VAR
+
+   VAR_IN_OUT
+      io_intJobActive : Int;                // "DB_RobotJob".intJobActive. hmi shows it
+   END_VAR
+
+   VAR_OUTPUT
+      o_xPushReq : Bool;                    // => "DB_RobotJob".Push.xReq
+      o_udtPush : "UDT_MoveReq";            // => "DB_RobotJob".Push.udtMove
+      o_xClear : Bool;                      // => "DB_RobotJob".Push.xClear
+      o_udtState : "UDT_JobState";          // => "DB_RobotJob".State
+   END_VAR
+
+BEGIN
+   IF NOT #i_udtCube.udtState.xRunning AND NOT #i_udtDrum.udtState.xRunning
+      AND NOT #i_udtLine.udtState.xRunning THEN
+      IF #i_intJob = 2 THEN
+         #io_intJobActive := 2;
+      ELSIF #i_intJob = 3 THEN
+         #io_intJobActive := 3;             // v0.2
+      ELSE
+         #io_intJobActive := 1;             // anything else is the cube
+      END_IF;
+   END_IF;
+
+   IF #io_intJobActive = 3 THEN             // v0.2
+      #o_xPushReq := #i_udtLine.xPushReq;
+      #o_udtPush := #i_udtLine.udtPush;
+      #o_xClear := #i_udtLine.xClear;
+      #o_udtState := #i_udtLine.udtState;
+   ELSIF #io_intJobActive = 2 THEN
+      #o_xPushReq := #i_udtDrum.xPushReq;
+      #o_udtPush := #i_udtDrum.udtPush;
+      #o_xClear := #i_udtDrum.xClear;
+      #o_udtState := #i_udtDrum.udtState;
+   ELSE
+      #o_xPushReq := #i_udtCube.xPushReq;
+      #o_udtPush := #i_udtCube.udtPush;
+      #o_xClear := #i_udtCube.xClear;
+      #o_udtState := #i_udtCube.udtState;
+   END_IF;
+END_FUNCTION

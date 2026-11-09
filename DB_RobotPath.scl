@@ -1,0 +1,19 @@
+DATA_BLOCK "DB_RobotPath"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// 2026-11-02, path mode. the seven path poses on their way to the bus.
+// one writer: fb_robotmove v0.6, step 10, through its in-out pins. read by ob30 network 2,
+// which puts them on the module 1 standard path segments as whole mm / deg:
+//    Pose_X_n := REAL_TO_INT("DB_RobotPath".aoudtP[n].rX)   n = 1..7, same for rY, rZ,
+//    Pose_R1_n from rRotZ, Pose_R2_n from rRotY, blending_distance_n from aorBlend[n]
+// in the robot these are the srl variables pose[1..7], used by the lines of blocks 5, 6, 7.
+// nothing else may write here. the old "DB_App".Path.Seg[n].X .. R2 fields are not used any more.
+NON_RETAIN
+   VAR
+      aoudtP : Array[1..7] of "UDT_Pose";   // pose[1..7]. unused segments hold the last pose of the path
+      aorBlend : Array[1..7] of Real;       // mm, blending distance per segment. 0 = exact stop
+   END_VAR
+
+BEGIN
+
+END_DATA_BLOCK

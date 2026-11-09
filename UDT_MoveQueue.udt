@@ -1,0 +1,12 @@
+TYPE "UDT_MoveQueue"
+VERSION : 0.1
+// fifo of move requests. a job pushes at the tail, the move engine eats the head.
+// written only by fb_movequeue.
+   STRUCT
+      aoudtMove : Array[1..50] of "UDT_MoveReq";
+      intHead : Int;        // index of the oldest entry, 1..50. 0 = not initialised yet
+      intTail : Int;        // index where the next push goes, 1..50
+      intCount : Int;       // entries in the queue, 0..50
+   END_STRUCT;
+
+END_TYPE
