@@ -248,15 +248,66 @@ Two things break the smooth cycle and are in the findings: switching AUTO or edi
 
 ## 6. The review
 
-Filled in when the verification returns. The six readings produced 36 findings, merged to 28; each is attacked by three refuters and survives only when two of three cannot refute it.
+Six readings of the code (engine, cycle timing, one writer, bus contract, cube job, error diagnosis) gave 43 findings, merged to 29. The adversarial pass (three refuters per group) was started twice and killed twice by restarts of the review machine; one refuter finished, the code lens over findings 1, 2, 3, 4 and 15, and refuted none of them. The column "checked by" says how far each finding was verified: **refuter** = code re-read line by line by an independent reader who tried to refute it; **readers** = found by one or more of the six readings and re-read by me against the files; **machine** = cannot be decided from the files, the watch of section 8 decides.
 
-(pending)
+Status on 2026-11-05: **v0.7** = removed by the change set of section 7; **open** = not changed, with the reason; **doc** = a document row, no code.
+
+| # | Finding | Severity | Checked by | Status |
+|---|---|---|---|---|
+| 1 | A path block 5..7 with `intPathLen` 0 passes step 5 and drives POSE[1..7] as they stand (`:180-188`, `:245-258`) | high | refuter | v0.7: error 17 |
+| 2 | An error while the robot moves only drops start and gates; in automatic the start is an edge, so the robot finishes the move while the engine says idle (`:334-345`). Unconditional for error 12 and a late-taken start; error 20 depends on OB1 NW8 dropping the module enable, 21 on the robot's fault ramp | high | refuter | v0.7: step 95 |
+| 3 | Step 5 checks the live request, step 10 re-reads it one cycle later; an AUTO switch or a typed pose in that cycle reaches the bus unchecked (`:176`, `:231-252`) | high | refuter | v0.7: `udtReqAct` |
+| 4 | `intRunNr` restarts after a download, the robot keeps REAL[72]; when equal, step 40 passes on the stale finished and the move is reported done without motion (`:78`, `:299`). Also reached by N refused attempts in one session | high | refuter | v0.7: run number ≠ echo |
+| 5 | REAL[71] echo word: the PLC reads PI 65, the robot names REAL[71] "PDI66". Either the module 2 FB offsets by one word or the transcription is wrong; moves complete today, so the FB most likely offsets | high | machine | open: section 8 row 6 |
+| 6 | The hand-set `Cmd.Start` is a second writer; with PI 2.6 pending it starts a repositioning move outside the engine, and the bit lingers because step 0 never wrote it | high | readers | v0.7: step 0 owns the start. Procedure: never again |
+| 7 | Turn mode commands RotZ +180 at the last turn, the joint 4 limit; whether the robot accepts a target on its software limit is a robot setting | high | readers + machine | open: hand-move to +180 first (section 7, step E19). The job keeps +180, job error 8 says when corner 1 is wrong |
+| 8 | After the start the engine is blind to a program stop or pause from outside until T_MOVE (60 s, 300 s) | medium | readers | v0.7: error 18 in step 50 |
+| 9 | One start edge per move, no retry: an ignored edge is error 11 after 3 s | medium | readers | open on purpose: a retry hides the cause. The settle from "ready" and step 0 remove the known cause; if error 11 stays after the watch, the retry is the next step |
+| 10 | The start is gated by `ReadyToStart AND MachineOn` on the OB30 pin; the engine cannot see a blocked start, and a toggle of the AND during step 50 would give a second edge with the gate open | medium | readers | open: the logic of the two tags is not in the folder. DIAG screen shows PO 2.2 beside `Cmd.Start` |
+| 11 | The settle counted from the entry of step 20, not from "program 20 ready"; after a download the first move is a program change on PO 4 and the edge can follow "initialized" by one cycle (125.57). Best fit for the open error 11 | high | readers | v0.7: step 0 writes 20 in idle, settle from ready |
+| 12 | Entries left in the queue drive the robot the moment AUTO and Enable go on, no job behind it | medium | readers | v0.7: `FC_MoveSelect` v0.3 needs the job running |
+| 13 | The engine never sees `Cmd.Stop` and `Cmd.Pause`; a held stop or pause gives error 11 or 15 without diagnosis | low | readers | open: the two tags belong to the old screen, which goes. DIAG shows them |
+| 14 | Step 15 exit on initialized AND NOT 2.6 AND NOT 2.7 can never be met if 2.6 is a sticky flag. The manual's state enum says it is a state, so the condition is right; error 15 then means the stop did not reach the robot or the start was not reset before it | high | readers | v0.7: step 0 resets the start in idle. The OB30 pin: section 8 row 4 |
+| 15 | REAL[71] is never cleared: a run in which no gate was taken looks like a success of block 1 | low | refuter | robot line 0, `PROGRAM20.md` 3b |
+| 16 | The start does not check "control type inactive" (PI 4.8/9/10), the start condition of the state diagram | low | readers | v0.7: in "program 20 ready" |
+| 17 | `BLOCK_MAP.md` and the `DB_RobotJob` header still name the screen as the writer of `Teach.*`, which `FB_CubeButtons` writes every cycle | medium | readers | doc, open: rows 74, 285, 302 of `BLOCK_MAP.md` and `DB_RobotJob.scl` line 5 |
+| 18 | `FB_StartTrace` in OB30 network 5 reads OB1 tags, is not in the folder and not in the map | medium | readers | open: delete the call when the start is stable, or put the block into `PLC/` |
+| 19 | `FB_CubeButtons` clears `Man.xStart`, `.xReset`, `.xAbort` one cycle after its own pulse, a screen press in that cycle is lost; a go to carried stale `intPathLen` and no id | low | readers | v0.7: cube buttons v0.2 fill the request. The clears stay until the four buttons move to `Btn` (SCREENS_V2) |
+| 20 | Stale rows in `BLOCK_MAP.md` (B4 Push writer, the OB30 "differs" table, no cube-buttons rows) | low | readers | doc, open |
+| 21 | PI 18 (joint 5) exists only if MOVISUITE transmits joint 5; the manual's default stops at joint 4 | low | machine | open: display only |
+| 22 | PI 7..11 is the setpoint pose; `udtPoseAtEnd` on an abort is where the robot was commanded, not where it stopped | low | readers | documented in step 95; teach and done use it at standstill |
+| 23 | Safe Z was only checked for > 0; below the scan height the approach and the lift dive at the cube | medium | readers | v0.7: job error 2 when safe Z ≤ corner 1 Z |
+| 24 | Length, width and angle have no plausibility bound; a negative size silently switches to taught rows | medium | readers | open: the bounds are machine numbers you must give (cube sizes). Not changed |
+| 25 | Path mode pushes block 5 without knowing `Cfg.intBlocksInPrg20`; three real moves, then engine error 1 | medium | readers | v0.7: job error 7 before the first move |
+| 26 | Error precedence in job step 10: the last cause wins, `intMoveActive` keeps an old index | low | readers | v0.7: first cause kept, row in `intMoveActive` |
+| 27 | "Scan from here" takes the setpoint pose with no standstill condition | low | readers | v0.7: OB1 pin `i_xActualValid` with NOT moving AND NOT running |
+| 28 | An all-zero pose passes the limit check; a row typed valid with zeros drives to the origin | low | readers | open: keep `aoxValid` off the screen's may-write list; teach, do not type |
+| 29 | The engine does not own `Cmd.Start` in idle; a hand-set TRUE stays on PO 2.2 through jogs and mode switches | medium | readers | v0.7: step 0 |
+
+What the readers checked and found sound, in one line each: the OB1 cycle between job, mux, queue, select and engine (start, done, pop, next edge, end of job, error, abort, go to and ACK pulses); OB30 interrupting step 10 cannot put a half pose on the robot at a moment where it matters; the step 15 to step 20 sequence satisfies manual 9.4; all six timers are called every cycle and every step has an exit; the bus word numbers 114..123 and the status map bits against manual 13.6 and 13.7; FC_PoseCheck accepts exactly ±180; the cube geometry, the orientation sequence, scan from here, the pose check loop, the path entry and the done counting; the handshake of both modules in one OB30 cycle. 125.57 (32057) is not in the manual text, the only source is `GOALS.md` 417.
+
+My nine proposals of 2026-11-04 against this: C1 (drop NOT 2.6 from step 15) not applied, the enum makes it empty; C2 (STO, output stage in error 5) applied; C3 (T_RUN 10 s) not applied, an ignored edge does not arrive later; C4 (echo in step 50) not applied, harmful without a wait line, redundant with it (section 3.4); C5 (latch the request) applied; C6 (pop by id) not applied, the job-running gate of select v0.3 is the smaller change; C7 (corner 1 at −180 check) applied as job error 8; C8 (buttons through `Btn`) not yet, the go-to request is filled instead; C9 (module 2 enable TRUE) not applied, not decided.
 
 ---
 
-## 7. The change set, in the order to type it
+## 7. The change set, as applied on 2026-11-05
 
-(pending, follows section 6)
+All in the folder, nothing in TIA yet. `GOALS.md` section 9 has the rows, `TEST/CHECKLIST_CUBE_AUTO.md` the pins and versions, `HMI/SCREEN_FIXES.md` 2.1 the text lists.
+
+| Order | What | File | Removes finding |
+|---|---|---|---|
+| 1 | the watch of section 8, rows 1 to 4, before anything is downloaded | – | decides 5, 10, 11, 14 |
+| 2 | program 20: `REAL 71 := 0` first, `WAIT_MOTION Motion_Done` before line 21 | `ROBOT/PROGRAM20.md` 3b | 15, and makes REAL 72 mean "arrived" |
+| 3 | `FB_RobotMove` v0.7 | `PLC/FB_RobotMove.scl` | 1, 2, 3, 4, 6, 8, 11, 14, 16, 29 |
+| 4 | `FC_MoveSelect` v0.3, one pin | `PLC/FC_MoveSelect.scl`, `OB1_Stage2_call.scl` | 12 |
+| 5 | `FB_ScanCubeJob` v0.7, one pin | `PLC/FB_ScanCubeJob.scl`, `OB1_Stage2_call.scl` | 23, 25, 26, 27 (pin), 7 (named) |
+| 6 | `FB_CubeButtons` v0.2 | `PLC/FB_CubeButtons.scl` | 19 (the request part) |
+| 7 | OB30 NW2 stop pin = the OR, checked in TIA | `OB30_complete.scl:52` | 14 |
+| 8 | text lists 17, 18, 95, job 7, 8 | `HMI/SCREEN_FIXES.md` 2.1 | – |
+| 9 | the map rows of 17 and 20, `FB_StartTrace` out of OB30 | `PLC/BLOCK_MAP.md`, `DB_RobotJob.scl` | 17, 18, 20 |
+| 10 | later: MOVE, RESET, ABORT, START as `Btn` bits, cube buttons v0.3 | `HMI/SCREENS_V2.html` | 19 (the clears) |
+
+Steps 3 to 6 are one compile and one download; the order inside TIA does not matter, the pins of step 4 and 5 must be set before the compile.
 
 ---
 
