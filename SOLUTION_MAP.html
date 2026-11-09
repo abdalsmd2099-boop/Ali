@@ -1,0 +1,404 @@
+<title>Gantry Full Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* layout: one column; the HMI as a grey device panel with numbered objects, the OBs as network cards in call order, the blocks as a grid of cards, two SVG drawings of the data flow */
+:root{
+  --bg:#f2f4f7; --fg:#1a1f27; --muted:#5c6572; --line:#cdd3dc; --card:#ffffff;
+  --accent:#0b6e99; --accent-soft:#e3f0f7; --warn:#a65a00; --warn-soft:#fbf0dc; --ok:#1f7a3a; --new:#7a3fa0; --new-soft:#efe4f7;
+  --hmi-bg:#dde1e6; --hmi-fg:#161a20; --hmi-field:#ffffff; --hmi-out:#eceff2; --hmi-border:#98a2ae;
+  --hmi-mom:#1d5fa6; --hmi-mom-fg:#ffffff; --hmi-on:#28a745; --hmi-off:#a2aab3; --hmi-group:#cbd1d8; --hmi-title:#2b3340;
+  --font:"Barlow",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#141820; --fg:#e6e9ee; --muted:#9aa4b2; --line:#2c3440; --card:#1b212b;
+  --accent:#55b4de; --accent-soft:#17303d; --warn:#e3a84f; --warn-soft:#3a2d14; --ok:#5fc57d; --new:#c08ae6; --new-soft:#2d1f3a; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#141820; --fg:#e6e9ee; --muted:#9aa4b2; --line:#2c3440; --card:#1b212b;
+  --accent:#55b4de; --accent-soft:#17303d; --warn:#e3a84f; --warn-soft:#3a2d14; --ok:#5fc57d; --new:#c08ae6; --new-soft:#2d1f3a; color-scheme:dark }
+
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.5}
+.wrap{max-width:1140px;margin:0 auto;padding-block:24px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:30px;font-weight:700;letter-spacing:-.01em;margin:0 0 4px;text-wrap:balance}
+h2{font-size:22px;font-weight:700;margin:40px 0 6px;padding-top:12px;border-top:2px solid var(--line);text-wrap:balance}
+h3{font-size:16px;font-weight:600;margin:22px 0 6px}
+p{margin:6px 0;max-width:76ch}
+.lede{color:var(--muted)}
+.kicker{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}
+nav.toc a{font-size:13px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:4px 12px;background:var(--card)}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code,.mono{font-family:var(--mono);font-size:.92em}
+.legend{display:flex;flex-wrap:wrap;gap:10px 18px;margin:12px 0 0;font-size:13px;color:var(--muted);align-items:center}
+.pill{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:500;border-radius:999px;padding:1px 8px;line-height:16px;border:1px solid transparent}
+.pill.tia{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.pill.main{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+.pill.here{background:var(--new-soft);color:var(--new);border-color:var(--new)}
+.pill.yours{background:var(--card);color:var(--muted);border-color:var(--line)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.tbl{overflow-x:auto;margin:8px 0 0}
+.tbl table{min-width:640px}
+.note{border-left:3px solid var(--warn);background:var(--warn-soft);padding:8px 12px;margin:12px 0;max-width:84ch}
+
+/* device panel, fixed colors on purpose */
+.hmi{background:var(--hmi-bg);color:var(--hmi-fg);border:1px solid var(--hmi-border);border-radius:6px;padding:12px;margin:12px 0 0;font-size:13px}
+.hmi-title{font-weight:700;font-size:14px;color:var(--hmi-title);margin:0 0 10px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.hmi-title small{font-weight:500;opacity:.75}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.cols{grid-template-columns:1fr}}
+.grp{background:var(--hmi-group);border:1px solid var(--hmi-border);border-radius:4px;padding:8px;min-width:0}
+.grp.new{outline:2px solid var(--hmi-mom)}
+.grp-t{font-weight:700;font-size:11px;letter-spacing:.08em;color:var(--hmi-title);margin:0 0 8px}
+.objs{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:8px}
+.obj{display:flex;flex-direction:column;gap:3px;min-width:0}
+.obj .top{display:flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px}
+.n{font-family:var(--mono);font-size:10px;font-weight:500;background:var(--hmi-title);color:var(--hmi-bg);border-radius:3px;padding:0 4px;line-height:16px}
+.io,.out{display:inline-flex;align-items:center;justify-content:flex-end;gap:4px;height:26px;padding:0 8px;border:1px solid var(--hmi-border);font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums;max-width:100%}
+.io{background:var(--hmi-field);color:var(--hmi-fg)}
+.out{background:var(--hmi-out);color:var(--hmi-fg);border-style:dashed}
+.io .u,.out .u{font-family:var(--font);font-size:11px;opacity:.7}
+.sw{display:inline-flex;align-items:center;gap:6px;height:26px}
+.sw i{display:inline-block;width:34px;height:18px;border-radius:9px;background:var(--hmi-off);position:relative;border:1px solid var(--hmi-border)}
+.sw i::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--hmi-field)}
+.sw.on i{background:var(--hmi-on)}.sw.on i::after{left:18px}
+.btn,.mom{display:inline-flex;align-items:center;justify-content:center;height:28px;padding:0 10px;border-radius:3px;border:1px solid var(--hmi-border);font-weight:700;font-size:11.5px;letter-spacing:.03em;white-space:nowrap}
+.btn{background:var(--hmi-field);color:var(--hmi-fg)}
+.mom{background:var(--hmi-mom);color:var(--hmi-mom-fg);border-color:var(--hmi-mom)}
+.lamp{display:inline-flex;align-items:center;gap:6px;height:26px;font-size:12.5px}
+.lamp i{width:12px;height:12px;border-radius:50%;background:var(--hmi-off);border:1px solid var(--hmi-border);display:inline-block}
+.lamp.on i{background:var(--hmi-on)}
+.tag{font-family:var(--mono);font-size:10.5px;color:var(--hmi-title);word-break:break-all;line-height:1.3}
+.hint{font-size:11px;color:var(--hmi-title);opacity:.8}
+
+/* network and block cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:10px;margin-top:8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}
+.card .t{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
+.card .nw{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.card b{display:block;font-size:14px;margin-bottom:4px}
+.card .pins{font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--fg);word-break:break-word}
+.card .pins em{font-style:normal;color:var(--muted)}
+.card .pins .new{color:var(--new);font-weight:500}
+.card .w{font-size:12px;color:var(--muted);margin-top:4px}
+.obs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+@media (max-width:900px){.obs{grid-template-columns:1fr}}
+.ob{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--bg)}
+.ob h3{margin:0 0 6px;font-size:15px}
+.ob .cards{grid-template-columns:1fr}
+figure{margin:12px 0}
+figcaption{font-size:13px;color:var(--muted);margin-top:4px}
+.fig{overflow-x:auto}
+svg.flow{display:block;height:auto;max-width:none;color:var(--fg)}
+svg.flow rect{fill:var(--card);stroke:currentColor;stroke-width:1.3}
+svg.flow rect.db{fill:var(--accent-soft)}
+svg.flow rect.new{fill:var(--new-soft);stroke:var(--new)}
+svg.flow rect.robot{fill:var(--warn-soft)}
+svg.flow line,svg.flow path{stroke:currentColor;stroke-width:1.3;fill:none}
+svg.flow text{font-family:var(--mono);font-size:10.5px;fill:currentColor;text-anchor:middle}
+svg.flow text.h{font-family:var(--font);font-size:12px;font-weight:600}
+svg.flow text.l{font-size:9.5px;fill:var(--muted)}
+.foot{margin-top:40px;padding-top:12px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+  <div class="kicker">2026-11-02, one folder since 2026-11-04 · path mode · S7-1511F, TIA V18, WinCC Unified, MOVIKIT Robotics</div>
+  <h1>Full map – HMI, OB33, OB1, every block, and the path mode</h1>
+  <p class="lede">The rectangle or the circle as one program run: the PLC writes up to seven poses into POSE 1 to 7 of the robot and one start drives them. This page shows the HMI with the tag on every object, OB33 and OB1 network by network with their pins, every DB, FB, FC and UDT, and how the data flows. The single-move way stays, a switch picks.</p>
+  <nav class="toc">
+    <a href="#flow">How it flows</a>
+    <a href="#hmi">HMI</a>
+    <a href="#ob33">OB33</a>
+    <a href="#ob1">OB1</a>
+    <a href="#blocks">DB, FB, FC, UDT</a>
+    <a href="#path">The path block</a>
+  </nav>
+  <div class="legend">
+    <span><span class="pill tia">in TIA</span> runs in the PLC today</span>
+    <span><span class="pill main">in the folder</span> written, not yet imported (parts 1a, 1b, 6)</span>
+    <span><span class="pill here">path mode</span> new or changed for the path mode, same folder, part 7</span>
+    <span><span class="pill yours">yours</span> your own blocks, untouched</span>
+  </div>
+
+  <!-- ===================================================== FLOW -->
+  <h2 id="flow">1. How it flows, one cycle</h2>
+  <figure>
+    <div class="fig">
+    <svg class="flow" viewBox="0 0 1180 400" width="1180" height="400" role="img" aria-label="Data flow from the HMI through the jobs, the queue, the select and the engine to the bus and the robot, and the status back">
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <!-- row 1: hmi -> dbs -> jobs -> mux -> queue -->
+      <rect x="20" y="40" width="120" height="70" rx="4"/><text class="h" x="80" y="68">HMI</text><text class="l" x="80" y="84">teach, recipe</text><text class="l" x="80" y="97">AUTO, START</text>
+      <rect class="db" x="180" y="20" width="150" height="40" rx="4"/><text x="255" y="37">"DB_Poses"</text><text class="l" x="255" y="51">aoudtP, aoxValid, rSafeZ</text>
+      <rect class="new" x="180" y="70" width="150" height="40" rx="4"/><text x="255" y="87">"DB_Recipe"</text><text class="l" x="255" y="101">Cube, Drum, xFromHere, xPathMode</text>
+      <rect class="db" x="180" y="120" width="150" height="40" rx="4"/><text x="255" y="137">"DB_RobotJob".Man</text><text class="l" x="255" y="151">xAuto, xStart, xAbort, intJob</text>
+      <line x1="140" y1="60" x2="178" y2="40" marker-end="url(#ar)"/><line x1="140" y1="75" x2="178" y2="90" marker-end="url(#ar)"/><line x1="140" y1="90" x2="178" y2="140" marker-end="url(#ar)"/>
+      <rect class="new" x="370" y="30" width="150" height="50" rx="4"/><text x="445" y="50">FB_ScanCubeJob</text><text class="l" x="445" y="66">14 moves, or 8 in path mode</text>
+      <rect class="new" x="370" y="100" width="150" height="50" rx="4"/><text x="445" y="120">FB_ScanDrumJob</text><text class="l" x="445" y="136">10 moves, or 7 in path mode</text>
+      <line x1="330" y1="40" x2="368" y2="50" marker-end="url(#ar)"/><line x1="330" y1="90" x2="368" y2="60" marker-end="url(#ar)"/><line x1="330" y1="90" x2="368" y2="120" marker-end="url(#ar)"/><line x1="330" y1="140" x2="368" y2="130" marker-end="url(#ar)"/>
+      <rect x="560" y="60" width="110" height="50" rx="4"/><text x="615" y="80">FC_JobMux</text><text class="l" x="615" y="96">picks cube or drum</text>
+      <line x1="520" y1="55" x2="558" y2="75" marker-end="url(#ar)"/><line x1="520" y1="125" x2="558" y2="95" marker-end="url(#ar)"/>
+      <rect class="db" x="710" y="60" width="120" height="50" rx="4"/><text x="770" y="80">"DB_RobotJob".Push</text><text class="l" x="770" y="96">xReq, udtMove, xClear</text>
+      <line x1="670" y1="85" x2="708" y2="85" marker-end="url(#ar)"/>
+      <rect x="870" y="60" width="110" height="50" rx="4"/><text x="925" y="80">FB_MoveQueue</text><text class="l" x="925" y="96">fifo, 50 deep</text>
+      <line x1="830" y1="85" x2="868" y2="85" marker-end="url(#ar)"/>
+      <rect class="db" x="1020" y="60" width="140" height="50" rx="4"/><text x="1090" y="80">"DB_MoveQueue".Head</text><text class="l" x="1090" y="96">the oldest entry</text>
+      <line x1="980" y1="85" x2="1018" y2="85" marker-end="url(#ar)"/>
+      <!-- down to row 2 -->
+      <path d="M1090,110 L1090,150 L1000,150 L1000,190" marker-end="url(#ar)"/>
+      <!-- row 2: select -> req -> engine -> outputs -> ob33 -> bus -> robot -->
+      <rect x="930" y="190" width="140" height="50" rx="4"/><text x="1000" y="210">FC_MoveSelect</text><text class="l" x="1000" y="226">auto: head. hand: Man.udtReq</text>
+      <rect class="db" x="780" y="190" width="120" height="50" rx="4"/><text x="840" y="210">"DB_RobotMove".Req</text><text class="l" x="840" y="226">+ xReqStart</text>
+      <line x1="928" y1="215" x2="902" y2="215" marker-end="url(#ar)"/>
+      <rect class="new" x="610" y="180" width="140" height="70" rx="4"/><text x="680" y="203">FB_RobotMove v0.6</text><text class="l" x="680" y="219">check, write, gate, start,</text><text class="l" x="680" y="232">wait for finished, echo</text>
+      <line x1="778" y1="215" x2="752" y2="215" marker-end="url(#ar)"/>
+      <rect class="db" x="420" y="170" width="160" height="40" rx="4"/><text x="500" y="187">"DB_App".Srl + Cmd</text><text class="l" x="500" y="201">POSE 51, REAL 51..54, gates, start</text>
+      <rect class="new" x="420" y="220" width="160" height="40" rx="4"/><text x="500" y="237">"DB_RobotPath"</text><text class="l" x="500" y="251">aoudtP[1..7], aorBlend[1..7]</text>
+      <line x1="608" y1="200" x2="582" y2="192" marker-end="url(#ar)"/><line x1="608" y1="230" x2="582" y2="238" marker-end="url(#ar)"/>
+      <rect x="250" y="170" width="130" height="90" rx="4"/><text class="h" x="315" y="195">OB33</text><text class="l" x="315" y="212">NW2 module 1: POSE 1..7</text><text class="l" x="315" y="225">NW3 module 2: POSE 51</text><text class="l" x="315" y="238">NW1 handshake</text><text class="l" x="315" y="251">NW4 status map</text>
+      <line x1="418" y1="190" x2="382" y2="200" marker-end="url(#ar)"/><line x1="418" y1="240" x2="382" y2="225" marker-end="url(#ar)"/>
+      <rect class="robot" x="40" y="170" width="170" height="90" rx="4"/><text class="h" x="125" y="193">Robot, program 20</text><text class="l" x="125" y="210">block 1: LIN POSE 51</text><text class="l" x="125" y="223">block 5: 7 LIN POSE 1..7</text><text class="l" x="125" y="236">block 6, 7: 1 CIRC, center POSE 51 + 360°</text><text class="l" x="125" y="251">echo REAL 71, 72</text>
+      <line x1="248" y1="205" x2="212" y2="205" marker-end="url(#ar)"/><text class="l" x="230" y="198">PO</text>
+      <line x1="212" y1="235" x2="248" y2="235" marker-end="url(#ar)"/><text class="l" x="230" y="248">PI</text>
+      <!-- status back -->
+      <path d="M315,262 L315,320 L560,320" marker-end="url(#ar)"/>
+      <rect class="db" x="562" y="300" width="130" height="40" rx="4"/><text x="627" y="317">"DB_Robot".Status</text><text class="l" x="627" y="331">one writer: NW4</text>
+      <path d="M692,320 L760,320 L760,252" marker-end="url(#ar)"/><text class="l" x="730" y="312">engine reads</text>
+      <path d="M680,252 L680,280 L445,280 L445,152" marker-end="url(#ar)"/><text class="l" x="560" y="275">"DB_RobotMove".State: busy, done, error → jobs, queue pop, HMI</text>
+      <path d="M627,342 L627,370 L80,370 L80,112" marker-end="url(#ar)"/><text class="l" x="350" y="385">lamps and actual pose on the screens</text>
+    </svg>
+    </div>
+    <figcaption>One cycle of OB1 from left to right on the top row, then the engine, the two output DBs, OB33 and the robot on the second row, and the status back. The purple boxes are what the path mode adds or changes. The dashed-looking blue boxes are DBs. In path mode the engine fills DB_RobotPath and opens gate 5, 6 or 7; otherwise only POSE 51 and gate 1 to 4.</figcaption>
+  </figure>
+
+  <!-- ===================================================== HMI -->
+  <h2 id="hmi">2. HMI – the Automatic screen with the CUBE box</h2>
+  <p class="lede">Every object with its tag. The poses, the job and the robot parts are the same as in SCREENS.html. The CUBE box is new: teaching from the screen with one button per pose, the numbers, and the two switches. Buttons with scripts show their press and release actions in the hint.</p>
+
+  <div class="hmi">
+    <div class="hmi-title"><span>Automatic</span><small>A1 … A46</small></div>
+    <div class="cols">
+      <div class="grp"><div class="grp-t">POSES</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A1</span>rows 1 … 10</span><span class="out">nr · name · valid · X Y Z RotZ RotY</span><span class="tag">valid: "DB_Poses".aoxValid[n]  fields: "DB_Poses".aoudtP[n].rX … .rRotY</span><span class="hint">1 home, 2 start, 3 approach, 4 corner 1 (reference), 5–7 corners, 8 drum center, 9–10 free</span></div>
+          <div class="obj"><span class="top"><span class="n">A2</span>pose nr</span><span class="io">4</span><span class="tag">"DB_RobotHand".Btn.intPoseNr</span><span class="hint">1 … 50, for any row. FB_CubeButtons passes it to Teach.intPoseNr</span></div>
+          <div class="obj"><span class="top"><span class="n">A3</span>TEACH</span><span class="mom">TEACH actual pose</span><span class="tag">"DB_RobotHand".Btn.xTeachNr</span><span class="hint">momentary, teaches row "pose nr"</span></div>
+          <div class="obj"><span class="top"><span class="n">A4</span>CLEAR</span><span class="mom">CLEAR</span><span class="tag">"DB_RobotHand".Btn.xClearNr</span><span class="hint">momentary</span></div>
+          <div class="obj"><span class="top"><span class="n">A5</span>taught · refused</span><span class="lamp on"><i></i> <i></i></span><span class="tag">"DB_RobotJob".Teach.xTaught, .xRefused</span><span class="hint">one cycle each</span></div>
+          <div class="obj"><span class="top"><span class="n">A6</span>last taught</span><span class="out">4</span><span class="tag">"DB_RobotJob".Teach.intLastTaught</span></div>
+          <div class="obj"><span class="top"><span class="n">A7</span>actual pose</span><span class="out">2246 · 1208 · 690 · −180 · 0</span><span class="tag">"DB_Robot".Status.udtPoseBcs.rX … .rRotY</span><span class="hint">what TEACH stores</span></div>
+        </div>
+      </div>
+      <div class="grp new"><div class="grp-t">CUBE · new</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A8</span>length</span><span class="io">600 <span class="u">mm</span></span><span class="tag">"DB_Recipe".Cube.rLength</span><span class="hint">0 … 4380. side 1. 0 = taught corners</span></div>
+          <div class="obj"><span class="top"><span class="n">A9</span>width</span><span class="io">400 <span class="u">mm</span></span><span class="tag">"DB_Recipe".Cube.rWidth</span><span class="hint">0 … 4230. side 2</span></div>
+          <div class="obj"><span class="top"><span class="n">A10</span>angle</span><span class="io">0 <span class="u">deg</span></span><span class="tag">"DB_Recipe".Cube.rAngle</span><span class="hint">−180 … 180. direction of side 1, 0 = +X</span></div>
+          <div class="obj"><span class="top"><span class="n">A11</span>corners</span><span class="out">computed from corner 1</span><span class="tag">text, visible by "DB_RobotHand".Lamp.xComputed. else "taught, rows 5 to 7"</span></div>
+          <div class="obj"><span class="top"><span class="n">A12</span>safe Z</span><span class="io">1500 <span class="u">mm</span></span><span class="tag">"DB_Poses".rSafeZ</span><span class="hint">−10 … 1908, the Z of start</span></div>
+          <div class="obj"><span class="top"><span class="n">A13</span>TEACH HOME</span><span class="mom">TEACH HOME</span><span class="tag">"DB_RobotHand".Btn.xTeachHome</span><span class="hint">momentary. enabled by Lamp.xTeachAllowed. FB_CubeButtons does the rest</span></div>
+          <div class="obj"><span class="top"><span class="n">A14</span>TEACH START</span><span class="mom">TEACH START</span><span class="tag">"DB_RobotHand".Btn.xTeachStart</span></div>
+          <div class="obj"><span class="top"><span class="n">A15</span>TEACH CORNER 1</span><span class="mom">TEACH CORNER 1</span><span class="tag">"DB_RobotHand".Btn.xTeachC1</span><span class="hint">tool at the corner, facing side 1, RotZ −180</span></div>
+          <div class="obj"><span class="top"><span class="n">A16</span>home · start · corner 1</span><span class="lamp on"><i></i> <i></i> <i></i></span><span class="tag">"DB_Poses".aoxValid[1], [2], [4]</span><span class="hint">three green = the cube can run</span></div>
+          <div class="obj"><span class="top"><span class="n">A17</span>GO TO START</span><span class="btn">GO TO START</span><span class="tag">"DB_RobotHand".Btn.xGoStart</span><span class="hint">momentary. enabled by Lamp.xGoAllowed. FB_CubeButtons copies row 2, block 1, starts</span></div>
+          <div class="obj"><span class="top"><span class="n">A18</span>GO TO CORNER 1</span><span class="btn">GO TO CORNER 1</span><span class="tag">"DB_RobotHand".Btn.xGoC1</span></div>
+          <div class="obj"><span class="top"><span class="n">A19</span>SCAN FROM HERE</span><span class="sw"><i></i>off</span><span class="tag">"DB_Recipe".xFromHere</span><span class="hint">on: START takes the actual pose as corner 1 / drum center</span></div>
+          <div class="obj"><span class="top"><span class="n">A20</span>PATH MODE</span><span class="sw"><i></i>off</span><span class="tag">"DB_Recipe".xPathMode</span><span class="hint">on: rectangle = block 5, circle = block 6 / 7, one run. needs Cfg = 7</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="cols" style="margin-top:12px">
+      <div class="grp"><div class="grp-t">SCAN</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A21</span>Enable</span><span class="sw on"><i></i>on</span><span class="tag">"DB_RobotMove".Man.xEnable</span><span class="hint">same tag as the Robot move screen</span></div>
+          <div class="obj"><span class="top"><span class="n">A22</span>AUTO</span><span class="sw"><i></i>off</span><span class="tag">"DB_RobotJob".Man.xAuto</span><span class="hint">on = the queue drives, MOVE and TEACH dead</span></div>
+          <div class="obj"><span class="top"><span class="n">A23</span>override</span><span class="io">10 <span class="u">%</span></span><span class="tag">"DB_RobotJob".Man.intOverride</span><span class="hint">1 … 100</span></div>
+          <div class="obj"><span class="top"><span class="n">A24</span>job</span><span class="io">1 <span class="u">cube</span></span><span class="tag">"DB_RobotJob".Man.intJob</span><span class="hint">1 cube, 2 drum. after part 6</span></div>
+          <div class="obj"><span class="top"><span class="n">A25</span>START</span><span class="mom">START</span><span class="tag">"DB_RobotJob".Man.xStart</span><span class="hint">momentary</span></div>
+          <div class="obj"><span class="top"><span class="n">A26</span>ABORT</span><span class="mom">ABORT</span><span class="tag">"DB_RobotJob".Man.xAbort</span><span class="hint">momentary</span></div>
+          <div class="obj"><span class="top"><span class="n">A27</span>ACK</span><span class="mom">ACK</span><span class="tag">"DB_RobotHand".Btn.xAck</span><span class="hint">engine error and job error in one</span></div>
+          <div class="obj"><span class="top"><span class="n">A28</span>queue waiting · full</span><span class="out">0</span><span class="tag">"DB_MoveQueue".intCount, .xFull</span></div>
+        </div>
+        <div class="grp-t" style="margin-top:12px">JOB</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A29</span>running · done · error</span><span class="lamp"><i></i> <i></i> <i></i></span><span class="tag">"DB_RobotJob".State.xRunning, .xDone, .xError</span></div>
+          <div class="obj"><span class="top"><span class="n">A30</span>active job</span><span class="out">1 <span class="u">cube</span></span><span class="tag">"DB_RobotJob".intJobActive</span><span class="hint">TL_Job</span></div>
+          <div class="obj"><span class="top"><span class="n">A31</span>job error</span><span class="out">0</span><span class="tag">"DB_RobotJob".State.intErrId</span><span class="hint">TL_JobErr: 1 not taught, 2 safe Z, 3 engine busy, 4 outside limits, 5 radius, 6 scan from here, 10 engine</span></div>
+          <div class="obj"><span class="top"><span class="n">A32</span>job step</span><span class="out">0 <span class="u">idle</span></span><span class="tag">"DB_RobotJob".State.intStep</span><span class="hint">TL_JobStep</span></div>
+          <div class="obj"><span class="top"><span class="n">A33</span>moves done / total</span><span class="out">0 / 8</span><span class="tag">"DB_RobotJob".State.intMovesDone, .intMovesTotal</span><span class="hint">cube: 14, or 8 in path mode</span></div>
+          <div class="obj"><span class="top"><span class="n">A34</span>active</span><span class="out">15 <span class="u">rectangle</span></span><span class="tag">"DB_RobotJob".State.intMoveActive</span><span class="hint">TL_Move 1–14, 15 rectangle. TL_MoveDrum 1–10, 11 circle</span></div>
+          <div class="obj"><span class="top"><span class="n">A35</span>engine error</span><span class="out">0</span><span class="tag">"DB_RobotJob".State.intEngineErr</span><span class="hint">TL_Err</span></div>
+        </div>
+      </div>
+      <div class="grp"><div class="grp-t">MOVE ENGINE</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A36</span>busy · done · error</span><span class="lamp"><i></i> <i></i> <i></i></span><span class="tag">"DB_RobotMove".State.xBusy, .xDone, .xError</span></div>
+          <div class="obj"><span class="top"><span class="n">A37</span>step</span><span class="out">0 <span class="u">idle</span></span><span class="tag">"DB_RobotMove".State.intStep</span><span class="hint">TL_Step</span></div>
+          <div class="obj"><span class="top"><span class="n">A38</span>error nr</span><span class="out">0</span><span class="tag">"DB_RobotMove".State.intErrId</span><span class="hint">TL_Err, with 16 "path longer than 7"</span></div>
+          <div class="obj"><span class="top"><span class="n">A39</span>run nr · block</span><span class="out">12 · 5</span><span class="tag">"DB_RobotMove".State.intRunNr, .intBlockActive</span><span class="hint">TL_Block 1–7</span></div>
+          <div class="obj"><span class="top"><span class="n">A40</span>blocks in program 20</span><span class="io">7</span><span class="tag">"DB_RobotMove".Cfg.intBlocksInPrg20</span><span class="hint">admin. 7 with blocks 5–7</span></div>
+        </div>
+        <div class="grp-t" style="margin-top:12px">ROBOT</div>
+        <div class="objs">
+          <div class="obj"><span class="top"><span class="n">A41</span>ready · ref · access · comm</span><span class="lamp on"><i></i> <i></i> <i></i> <i></i></span><span class="tag">"DB_Robot".Status.xReady, .xReferenced, .xAccessGranted, .xCommOK</span></div>
+          <div class="obj"><span class="top"><span class="n">A42</span>automatic · manual</span><span class="lamp on"><i></i> <i></i></span><span class="tag">"DB_Robot".Status.xAutomatic, NOT the same</span><span class="hint">FB_RobotMode sets it, no switch</span></div>
+          <div class="obj"><span class="top"><span class="n">A43</span>moving · running · finished</span><span class="lamp"><i></i> <i></i> <i></i></span><span class="tag">"DB_Robot".Status.xMoving, .xPrgRunning, .xPrgFinished</span></div>
+          <div class="obj"><span class="top"><span class="n">A44</span>fault · message id</span><span class="out">0</span><span class="tag">"DB_Robot".Status.xFault, .uiMsgId</span></div>
+          <div class="obj"><span class="top"><span class="n">A45</span>actual pose</span><span class="out">2246 · 1208 · 690 · −180 · 0</span><span class="tag">"DB_Robot".Status.udtPoseBcs.rX … .rRotY</span></div>
+          <div class="obj"><span class="top"><span class="n">A46</span>alarms</span><span class="out">alarm view</span><span class="tag">"DB_RobotJob".aoxAlarm[1..32]</span><span class="hint">1–22 engine (16 path), 9 and 15 job, 23–27 job, 28–32 robot</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Robot move screen, the hand screen, unchanged</h3>
+  <p>Target X Y Z RotZ RotY on <code>"DB_RobotMove".Man.udtReq.udtPose.*</code>, override on <code>.udtReq.intOverride</code>, block on <code>.udtReq.intBlock</code> with TL_Block 1 to 4 only by hand, radius on <code>.udtReq.aorPar[1]</code>, Enable on <code>Man.xEnable</code>, MOVE on <code>Man.xStart</code>, RESET on <code>Man.xReset</code>, the engine state and the robot lamps as above. Blocks 5 to 7 are never started by hand: a hand request carries no path.</p>
+
+  <h3>The jog and home buttons, old screen or the hand rungs</h3>
+  <p>Jog X+ … RotY−, home X … RotY, simulation, robot reset, as in <code>SCREENS.html</code> section 3. With FB_RobotMode the robot's automatic switch is gone, lamp A42 shows the mode.</p>
+
+  <!-- ===================================================== OB33 -->
+  <h2 id="ob33">3. OB33 – the bus, four networks every 10 ms</h2>
+  <p class="lede">Your cyclic interrupt. The files call it OB30, the content is the same. The stop pin takes the engine's program stop (engine v0.5), and the tags on the pose pins of network 2 change for the path mode.</p>
+  <div class="cards">
+    <div class="card"><div class="t"><span class="nw">NW1 · handshake</span><span class="pill yours">yours</span></div><b>toggle "DB_App".HS when the robot echoed it</b><div class="pins">writes <em>"DB_App".HS, .HS_Stall, .HS_Alive, .HS_Count</em></div><div class="w">the one writer of HS. HS_Alive goes into the status map as comm ok</div></div>
+    <div class="card"><div class="t"><span class="nw">NW2 · module 1, slot 18, hw 278</span><span class="pill here">pins change</span></div><b>"DB_MOVIKIT_Robotics-5AX"(…)</b><div class="pins">enable ← "DB_App".Cmd.Enable <em>(OB1 NW8)</em><br>automatic ← "DB_App".Cmd.Automatic <em>(FB_RobotMode)</em><br>override, prog_no ← Cmd.Override, Cmd.ProgramNumber <em>(engine)</em><br>start ← Cmd.Start AND ReadyToStart AND MachineOn <em>(engine, yours)</em><br>reset, simulation, pause, stop, homing_*, jog_* ← Cmd.* <em>(old screen)</em><br><span class="new">Pose_X_n … Pose_R2_n ← REAL_TO_INT("DB_RobotPath".aoudtP[n].rX … rRotY), n = 1..7</span><br><span class="new">blending_distance_n ← REAL_TO_INT("DB_RobotPath".aorBlend[n])</span><br>Motion_Set_n, wait_n, path_end_n ← "DB_App".Path.Seg[n].* <em>unused, stay</em></div><div class="w">the 35 pose pins were "DB_App".Path.Seg[n].X … R2, which nothing wrote. R1 = RotZ, R2 = RotY</div></div>
+    <div class="card"><div class="t"><span class="nw">NW3 · module 2, slot 19, hw 272</span><span class="pill tia">in TIA</span></div><b>"DB_MOVIKIT_ROBOTICS_Module2"(…)</b><div class="pins">enable ← "DB_App".Cmd.Enable <em>(your choice, file says TRUE)</em><br>PoseX … PoseRotY ← "DB_App".Srl.Pose[1..5] <em>→ POSE 51, words 114–118</em><br>WrBool1..8 ← "DB_App".Srl.Gate[1..8] <em>→ BOOL 51..58, word 123</em><br>BoolWriteEnable ← Srl.GateEnable<br>Param1..4 ← "DB_App".Srl.Par[1..4] <em>→ REAL 51..54, words 119–122</em><br>SrlBool1..4 → "DB_App".Srl.In[1..4] · Communication_OK → Srl.CommOK<br>SrlRealRaw[1], [2] <em>= REAL 71, 72, read by the engine</em></div><div class="w">unchanged. The gates of blocks 5, 6, 7 are BOOL 55, 56, 57 = WrBool5..7, already wired</div></div>
+    <div class="card"><div class="t"><span class="nw">NW4 · status map</span><span class="pill tia">in TIA</span></div><b>"FC_RobotStatusMap"(…)</b><div class="pins">i_aowPI ← "DB_MOVIKIT_Robotics-5AX".PI<br>i_xHsAlive ← "DB_App".HS_Alive · i_xM2CommOK ← "DB_App".Srl.CommOK<br>o_udtStatus → "DB_Robot".Status</div><div class="w">the one writer of DB_Robot.Status. Everything else only reads it</div></div>
+  </div>
+
+  <!-- ===================================================== OB1 -->
+  <h2 id="ob1">4. OB1 – the decisions, in call order</h2>
+  <p class="lede">After your networks 5, 7 and 8. One box per network, the order is the data flow of one cycle. Purple pins are the ones the path mode adds. The names in the cards are the pins of the blocks and the tags on them.</p>
+  <div class="cards">
+    <div class="card"><div class="t"><span class="nw">NW8 · enable</span><span class="pill yours">yours</span></div><b>Cmd.Enable, the one writer</b><div class="pins">machine on AND referenced AND a requester, one branch is "DB_RobotMove".Man.xEnable → "DB_App".Cmd.Enable</div></div>
+    <div class="card"><div class="t"><span class="nw">robot mode</span><span class="pill main">in the folder, step 1a</span></div><b>"IDB_RobotMode" (FB_RobotMode)</b><div class="pins">i_xJogWanted ← 16 parallel contacts: Cmd.Jog_*, Cmd.Home_*, "DB_App".Home.active<br>i_xAuto ← "DB_RobotJob".Man.xAuto · i_xEngineBusy ← "DB_RobotMove".State.xBusy<br>i_udtStatus ← "DB_Robot".Status<br>io_xAutomatic ↔ "DB_App".Cmd.Automatic</div><div class="w">automatic at rest, manual while a jog or home is held and nothing of ours moves</div></div>
+    <div class="card"><div class="t"><span class="nw">cube buttons</span><span class="pill main">in the folder, 2026-11-03</span></div><b>"IDB_CubeButtons" (FB_CubeButtons)</b><div class="pins">i_xTeachHome, i_xTeachStart, i_xTeachC1, i_xTeachNr, i_xClearNr, i_intPoseNrReq, i_xGoStart, i_xGoC1, i_xAck ← "DB_RobotHand".Btn.*<br>i_aoudtP, i_aoxValid ← "DB_Poses".* · i_rLength, i_rWidth ← "DB_Recipe".Cube.*<br>i_xEnable ← Man.xEnable · i_xAuto ← Man.xAuto · i_xEngineBusy ← State.xBusy<br>io_udtMan ↔ "DB_RobotMove".Man.udtReq · io_xManStart ↔ Man.xStart · io_xReset ↔ Man.xReset · io_xAbort ↔ "DB_RobotJob".Man.xAbort<br>o_intPoseNr, o_xTeach, o_xClear → "DB_RobotJob".Teach.* · o_x*Allowed, o_xCubeReady, o_xComputed → "DB_RobotHand".Lamp.*</div><div class="w">the screen buttons as plain bits, no scripts. Before teach, so a pulse is seen in the same cycle</div></div>
+    <div class="card"><div class="t"><span class="nw">teach</span><span class="pill tia">in TIA</span></div><b>"IDB_Teach" (FB_Teach)</b><div class="pins">i_xTeach ← Teach.xTeach · i_xClearPose ← Teach.xClear · i_intPoseNr ← Teach.intPoseNr<br>i_xAllowed ← Man.xEnable AND NOT Man.xAuto AND NOT State.xBusy<br>i_xActualValid ← Status.xReferenced AND Status.xCommOK · i_udtActual ← Status.udtPoseBcs<br>io_aoudtP ↔ "DB_Poses".aoudtP · io_aoxValid ↔ "DB_Poses".aoxValid<br>o_xTaught, o_xRefused, o_intLastTaught → "DB_RobotJob".Teach.*</div><div class="w">the teach buttons of the CUBE box only set the pose number and press this bit</div></div>
+    <div class="card"><div class="t"><span class="nw">cube job</span><span class="pill here">v0.5</span></div><b>"IDB_ScanCubeJob" (FB_ScanCubeJob)</b><div class="pins">i_xStart ← Man.xStart AND Man.intJob = 1 · i_xAbort ← Man.xAbort · i_xAuto ← Man.xAuto AND Man.xEnable<br>i_intOverride ← Man.intOverride · i_aoudtP, i_aoxValid, i_rSafeZ ← "DB_Poses".*<br>i_udtMoveState ← "DB_RobotMove".State · i_intQueueCount ← "DB_MoveQueue".intCount<br>i_rLength, i_rWidth, i_rAngle ← "DB_Recipe".Cube.*<br>i_xFromHere ← "DB_Recipe".xFromHere · i_udtActual ← Status.udtPoseBcs · i_xActualValid ← referenced AND comm<br><span class="new">i_xPathMode ← "DB_Recipe".xPathMode</span><br>o_xPushReq, o_udtPush, o_xClear, o_udtState → "DB_RobotJob".Cube.*</div><div class="w">14 single moves, or 3 singles + the rectangle (block 5, id 15) + 4 singles</div></div>
+    <div class="card"><div class="t"><span class="nw">drum job</span><span class="pill here">v0.4</span></div><b>"IDB_ScanDrumJob" (FB_ScanDrumJob)</b><div class="pins">the same nine as the cube job, i_xStart gated by Man.intJob = 2<br>i_rZ, i_rRadius, i_rStartAngle (unused), i_rRotZOffset, i_xClockwise ← "DB_Recipe".Drum.*<br>i_xFromHere, i_udtActual, i_xActualValid as the cube job<br><span class="new">i_xPathMode ← "DB_Recipe".xPathMode</span><br>o_udtOut → "DB_RobotJob".Drum</div><div class="w">10 single moves, or 3 singles + the circle (block 6 or 7, id 11) + 3 singles</div></div>
+    <div class="card"><div class="t"><span class="nw">job mux</span><span class="pill main">in the folder, part 6</span></div><b>"FC_JobMux"</b><div class="pins">i_intJob ← Man.intJob · i_udtCube ← "DB_RobotJob".Cube · i_udtDrum ← "DB_RobotJob".Drum<br>io_intJobActive ↔ "DB_RobotJob".intJobActive<br>o_xPushReq, o_udtPush, o_xClear → "DB_RobotJob".Push.* · o_udtState → "DB_RobotJob".State</div><div class="w">the one writer of Push and State. Follows intJob only while no job runs</div></div>
+    <div class="card"><div class="t"><span class="nw">queue</span><span class="pill tia">in TIA</span></div><b>"IDB_MoveQueue" (FB_MoveQueue)</b><div class="pins">i_xPush ← Push.xReq · i_udtPush ← Push.udtMove · i_xClear ← Push.xClear<br>i_xPop ← "DB_RobotMove".State.xDone<br>io_udtQ ↔ "DB_MoveQueue".Q<br>o_udtHead, o_xHeadValid, o_intCount, o_xFull, o_xPushRefused → "DB_MoveQueue".*</div><div class="w">an entry is a whole UDT_MoveReq, with its seven path poses when it has them</div></div>
+    <div class="card"><div class="t"><span class="nw">select</span><span class="pill tia">in TIA, v0.2</span></div><b>"FC_MoveSelect"</b><div class="pins">i_xHand ← Man.xEnable AND NOT Man.xAuto · i_xAuto ← Man.xEnable AND Man.xAuto<br>i_udtMan ← "DB_RobotMove".Man.udtReq · i_xManStart ← Man.xStart<br>i_udtQueueHead ← "DB_MoveQueue".Head · i_xQueueHeadValid ← .xHeadValid · i_udtMoveState ← State<br>o_udtReq → "DB_RobotMove".Req · o_xStart → "DB_RobotMove".xReqStart</div><div class="w">auto wins. In auto the start is a level: head valid, engine idle, no error</div></div>
+    <div class="card"><div class="t"><span class="nw">engine, same network</span><span class="pill here">v0.4</span></div><b>"IDB_RobotMove" (FB_RobotMove)</b><div class="pins">i_xStart ← xReqStart · i_xEnable ← Man.xEnable · i_xReset ← Man.xReset · i_xSensorStop ← FALSE<br>i_udtReq ← "DB_RobotMove".Req · i_intBlocksInPrg20 ← Cfg.intBlocksInPrg20 <em>= 7</em><br>i_udtStatus ← "DB_Robot".Status · i_intEchoBlock, i_intEchoRun ← "DB_MOVIKIT_ROBOTICS_Module2".SrlRealRaw[1], [2]<br>io_aorSrlPose, io_aorSrlPar, io_aoxSrlGate, io_xGateEnable ↔ "DB_App".Srl.*<br>io_xStart, io_intPrgNr, io_intOverride ↔ "DB_App".Cmd.Start, .ProgramNumber, .Override<br><span class="new">io_aoudtPath ↔ "DB_RobotPath".aoudtP · io_aorPathBlend ↔ "DB_RobotPath".aorBlend</span><br>o_udtState → "DB_RobotMove".State</div><div class="w">step 5 checks the target and every path pose, step 10 writes POSE 51 and, with a path, POSE 1..7, then gate and start, waits up to 60 s or 300 s</div></div>
+    <div class="card"><div class="t"><span class="nw">alarms</span><span class="pill tia">in TIA</span></div><b>"FC_RobotAlarms"</b><div class="pins">i_udtMoveState ← State · i_udtJobState ← "DB_RobotJob".State · i_udtStatus ← Status<br>o_aoxAlarm → "DB_RobotJob".aoxAlarm[1..32]</div><div class="w">engine error 16 lands on bit 16 by the number rule, no change</div></div>
+  </div>
+
+  <!-- ===================================================== BLOCKS -->
+  <h2 id="blocks">5. DB, FB, FC, UDT – every block and its one writer</h2>
+
+  <h3>UDTs</h3>
+  <div class="cards">
+    <div class="card"><div class="t"><b>UDT_Pose</b><span class="pill tia">in TIA</span></div><div class="pins">rX, rY, rZ, rRotZ, rRotY : Real</div></div>
+    <div class="card"><div class="t"><b>UDT_MoveReq v0.3</b><span class="pill here">+2 fields</span></div><div class="pins">intBlock, udtPose, udtPose2, rBlend, aorPar[1..3], intOverride, xStopOnSensor, intId<br><span class="new">aoudtPath[1..7] : UDT_Pose · intPathLen : Int</span></div><div class="w">used by Man.udtReq, Req, the queue entries, Push.udtMove</div></div>
+    <div class="card"><div class="t"><b>UDT_MoveState</b><span class="pill tia">in TIA</span></div><div class="pins">xBusy, xDone, xError, intErrId, intStep, intRunNr, intIdActive, intBlockActive, udtPoseAtEnd, uiMsgIdAtError</div></div>
+    <div class="card"><div class="t"><b>UDT_RobotStatus</b><span class="pill tia">in TIA</span></div><div class="pins">the PI words of module 1 as named bits and values, udtPoseBcs, xCommOK</div></div>
+    <div class="card"><div class="t"><b>UDT_MoveQueue</b><span class="pill tia">in TIA</span></div><div class="pins">aoudtMove[1..50], intHead, intTail, intCount</div></div>
+    <div class="card"><div class="t"><b>UDT_JobState</b><span class="pill tia">in TIA</span></div><div class="pins">xRunning, xDone, xError, intErrId, intStep, intMovesTotal, intMovesDone, intMoveActive, intEngineErr</div></div>
+    <div class="card"><div class="t"><b>UDT_JobOut</b><span class="pill main">part 6</span></div><div class="pins">xPushReq, udtPush, xClear, udtState</div></div>
+  </div>
+
+  <h3>DBs</h3>
+  <div class="cards">
+    <div class="card"><div class="t"><b>"DB_App"</b><span class="pill yours">yours</span></div><div class="pins">HS* ← OB33 NW1 · Cmd.Enable ← OB1 NW8 · Cmd.Automatic ← FB_RobotMode<br>Cmd.Start, .ProgramNumber, .Override, Srl.Pose, .Par, .Gate, .GateEnable ← engine<br>Srl.In, .CommOK ← module 2 FB · Cmd.Reset, .Simulation, .Pause, .Stop, .Home_*, .Jog_* ← old screen<br>ReadyToStart, MachineOn, Home.* ← your logic · Path.Seg[n] <em>no writer, no reader any more</em></div></div>
+    <div class="card"><div class="t"><b>"DB_Robot"</b><span class="pill tia">in TIA</span></div><div class="pins">Status ← FC_RobotStatusMap, OB33 NW4. Everybody reads</div></div>
+    <div class="card"><div class="t"><b>"DB_RobotMove"</b><span class="pill tia">in TIA, re-initialized by the UDT change</span></div><div class="pins">Cfg (retain) ← HMI, intBlocksInPrg20 = 7 · Man ← HMI · Req, xReqStart ← FC_MoveSelect · State ← engine</div></div>
+    <div class="card"><div class="t"><b>"DB_Poses"</b><span class="pill tia">in TIA, never touched</span></div><div class="pins">aoudtP, aoxValid ← FB_Teach (and typing) · rSafeZ ← HMI. Retain</div></div>
+    <div class="card"><div class="t"><b>"DB_Recipe" v0.2</b><span class="pill here">+ xPathMode</span></div><div class="pins">Cube.rLength, .rWidth, .rAngle · Drum.rZ, .rRadius, .rStartAngle (unused), .rRotZOffset, .xClockwise · xFromHere · <span class="new">xPathMode</span> ← HMI. Retain</div></div>
+    <div class="card"><div class="t"><b>"DB_RobotPath"</b><span class="pill here">new</span></div><div class="pins">aoudtP[1..7], aorBlend[1..7] ← engine step 10 · read by OB33 NW2</div><div class="w">the seven poses on their way to POSE 1..7</div></div>
+    <div class="card"><div class="t"><b>"DB_RobotJob"</b><span class="pill main">part 6 version</span></div><div class="pins">Man, Teach.xTeach/.xClear/.intPoseNr ← HMI · Teach.xTaught/.xRefused/.intLastTaught ← FB_Teach<br>Cube ← cube job · Drum ← drum job · Push, State, intJobActive ← FC_JobMux · aoxAlarm ← FC_RobotAlarms</div></div>
+    <div class="card"><div class="t"><b>"DB_MoveQueue"</b><span class="pill tia">in TIA</span></div><div class="pins">Q, Head, xHeadValid, intCount, xFull, xPushRefused ← FB_MoveQueue only</div></div>
+    <div class="card"><div class="t"><b>"IDB_RobotMove", "IDB_Teach", "IDB_ScanCubeJob", "IDB_ScanDrumJob", "IDB_MoveQueue", "IDB_RobotMode"</b><span class="pill tia">instances</span></div><div class="pins">one instance each, one call each</div></div>
+    <div class="card"><div class="t"><b>"DB_MOVIKIT_Robotics-5AX", "DB_MOVIKIT_ROBOTICS_Module2"</b><span class="pill yours">yours</span></div><div class="pins">the two module FB instances. PI, PO arrays; SrlRealRaw[1..2] = REAL 71, 72</div></div>
+    <div class="card"><div class="t"><b>"DB_RobotHand"</b><span class="pill main">later</span></div><div class="pins">jog and home requests of the hand rungs, SCREENS.html section 5</div></div>
+  </div>
+
+  <h3>FCs</h3>
+  <div class="cards">
+    <div class="card"><div class="t"><b>FC_PoseCheck</b><span class="pill tia">in TIA</span></div><div class="pins">one UDT_Pose → 0 ok, 2 xyz outside, 3 rotation outside. Limits X 0..4380, Y 0..4230, Z −10..1908, RotZ ±180, RotY ±10</div><div class="w">called by the engine for the target and every path pose, and by the jobs for every list pose</div></div>
+    <div class="card"><div class="t"><b>FC_RobotStatusMap</b><span class="pill tia">OB33 NW4</span></div><div class="pins">PI words → DB_Robot.Status</div></div>
+    <div class="card"><div class="t"><b>FC_MoveSelect v0.2</b><span class="pill tia">OB1</span></div><div class="pins">hand or queue head → DB_RobotMove.Req, xReqStart</div></div>
+    <div class="card"><div class="t"><b>FC_JobMux</b><span class="pill main">part 6</span></div><div class="pins">Cube or Drum → Push, State, intJobActive</div></div>
+    <div class="card"><div class="t"><b>FC_RobotAlarms</b><span class="pill tia">OB1</span></div><div class="pins">engine, job, robot → aoxAlarm[1..32]</div></div>
+  </div>
+
+  <h3>FBs</h3>
+  <div class="cards">
+    <div class="card"><div class="t"><b>FB_RobotMove v0.6</b><span class="pill here">path mode</span></div><div class="pins">steps 0 idle, 5 check, 10 write with the gate, 15 program stop when the robot wants to reposition after a jog (v0.5, error 15 if not taken), 20 settle 100 ms, 30 start, 40 wait running, 50 wait finished and standstill, 60 echo check and done, 90 error<br>v0.4 gate with the pose · v0.5 program stop, OB30 NW2 stop pin = Cmd.Stop OR State.xPrgStop, UDT_MoveState v0.2 · v0.6 path: check in 5, write to DB_RobotPath in 10, T_MOVE_PATH 300 s, error 16, radius check on 6 and 7</div></div>
+    <div class="card"><div class="t"><b>FB_ScanCubeJob v0.5</b><span class="pill here">path mode</span></div><div class="pins">dimensions, scan from here, turns −180 → +180, path mode. List 1..14, path entry id 15</div></div>
+    <div class="card"><div class="t"><b>FB_ScanDrumJob v0.4</b><span class="pill here">path mode</span></div><div class="pins">center from pose 8 or the actual pose, circle from −180 to +180, path mode. List 1..10, path entry id 11</div></div>
+    <div class="card"><div class="t"><b>FB_Teach</b><span class="pill tia">in TIA</span></div><div class="pins">TEACH edge → pose n := actual, valid n := true. CLEAR → valid n := false</div></div>
+    <div class="card"><div class="t"><b>FB_MoveQueue</b><span class="pill tia">in TIA</span></div><div class="pins">push at the tail, pop on done, clear</div></div>
+    <div class="card"><div class="t"><b>FB_RobotMode</b><span class="pill main">step 1a</span></div><div class="pins">Cmd.Automatic := NOT manual wanted</div></div>
+    <div class="card"><div class="t"><b>FB_CubeButtons</b><span class="pill main">2026-11-03</span></div><div class="pins">button bits → pose number + teach pulse, go to copy + start pulse, ack pulse, four lamp bits. The one writer of Teach.intPoseNr, .xTeach, .xClear</div></div>
+    <div class="card"><div class="t"><b>FB_MachineReady, "MOVIKIT_Robotics" module 1 and 2</b><span class="pill yours">yours</span></div><div class="pins">OB1 NW7, OB33 NW2 and NW3</div></div>
+  </div>
+
+  <!-- ===================================================== PATH -->
+  <h2 id="path">6. The path block, where the seven poses go</h2>
+  <figure>
+    <div class="fig">
+    <svg class="flow" viewBox="0 0 1180 300" width="1180" height="300" role="img" aria-label="The cube job list entries 4 to 10 go into the seven path poses, the engine writes them to DB_RobotPath, OB33 puts them on the module 1 segments, block 5 of program 20 drives them with seven LIN lines">
+      <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <text class="h" x="120" y="30">cube job, list</text>
+      <rect x="30" y="45" width="180" height="22" rx="3"/><text x="120" y="60">4 side 1 → corner 2</text>
+      <rect x="30" y="72" width="180" height="22" rx="3"/><text x="120" y="87">5 turn at corner 2</text>
+      <rect x="30" y="99" width="180" height="22" rx="3"/><text x="120" y="114">6 side 2 → corner 3</text>
+      <rect x="30" y="126" width="180" height="22" rx="3"/><text x="120" y="141">7 turn at corner 3</text>
+      <rect x="30" y="153" width="180" height="22" rx="3"/><text x="120" y="168">8 side 3 → corner 4</text>
+      <rect x="30" y="180" width="180" height="22" rx="3"/><text x="120" y="195">9 turn at corner 4</text>
+      <rect x="30" y="207" width="180" height="22" rx="3"/><text x="120" y="222">10 side 4 → corner 1</text>
+      <text class="l" x="120" y="252">singles before: 1 start, 2 approach, 3 corner 1</text>
+      <text class="l" x="120" y="266">singles after: 11 turn c1, 12 lift, 13 start, 14 home</text>
+      <line x1="210" y1="137" x2="268" y2="137" marker-end="url(#ar2)"/><text class="l" x="240" y="128">copy</text>
+      <text class="h" x="400" y="30">one queue entry, id 15</text>
+      <rect class="new" x="270" y="45" width="260" height="184" rx="4"/>
+      <text x="400" y="66">intBlock = 5 · intPathLen = 7</text>
+      <text x="400" y="86">aoudtPath[1] = list 4</text><text x="400" y="104">aoudtPath[2] = list 5</text><text x="400" y="122">aoudtPath[3] = list 6</text><text x="400" y="140">aoudtPath[4] = list 7</text><text x="400" y="158">aoudtPath[5] = list 8</text><text x="400" y="176">aoudtPath[6] = list 9</text><text x="400" y="194">aoudtPath[7] = list 10</text>
+      <text x="400" y="216">udtPose = list 10 · rBlend = 0 · override</text>
+      <line x1="530" y1="137" x2="588" y2="137" marker-end="url(#ar2)"/><text class="l" x="560" y="128">queue, select</text>
+      <text class="h" x="690" y="30">engine step 10</text>
+      <rect class="new" x="590" y="45" width="200" height="184" rx="4"/>
+      <text x="690" y="70">"DB_RobotPath".aoudtP[1..7]</text><text x="690" y="88">:= aoudtPath[1..7]</text>
+      <text x="690" y="114">"DB_RobotPath".aorBlend[1..7] := 0</text>
+      <text x="690" y="140">"DB_App".Srl.Pose := udtPose</text>
+      <text x="690" y="166">gate BOOL 55, then start</text>
+      <text x="690" y="192">wait finished, up to 300 s</text>
+      <text x="690" y="214">echo REAL 71 = 5, REAL 72 = run</text>
+      <line x1="790" y1="137" x2="848" y2="137" marker-end="url(#ar2)"/><text class="l" x="820" y="128">OB33 NW2</text>
+      <text class="h" x="1000" y="30">robot, program 20, block 5</text>
+      <rect class="robot" x="850" y="45" width="300" height="184" rx="4"/>
+      <text x="1000" y="66">IF BOOL 55</text>
+      <text x="1000" y="84">SET_MOTIONSET normal</text>
+      <text x="1000" y="102">LIN_VAR POSE 1 · LIN_VAR POSE 2</text>
+      <text x="1000" y="120">LIN_VAR POSE 3 · LIN_VAR POSE 4</text>
+      <text x="1000" y="138">LIN_VAR POSE 5 · LIN_VAR POSE 6</text>
+      <text x="1000" y="156">LIN_VAR POSE 7</text>
+      <text x="1000" y="178">REAL 71 := 5</text>
+      <text x="1000" y="196">END_IF</text>
+      <text class="l" x="1000" y="218">POSE 1..7 = module 1 segments, PO words 5..53</text>
+      <text class="l" x="1000" y="252">drum: block 6 or 7, one CIRC line, center in POSE 51, 360° in REAL 52 (2026-11-06),</text>
+      <text class="l" x="1000" y="266">radius REAL 51, angle 90 REAL 52, list 4..7, id 11</text>
+    </svg>
+    </div>
+    <figcaption>The rectangle as one entry. The job copies its list moves 4 to 10 into the seven path poses, the engine writes them into DB_RobotPath, OB33 network 2 puts them on the bus as POSE 1 to 7, and block 5 drives them with seven LIN lines. Each turn line changes only the orientation. The engine waits for the end of the whole run.</figcaption>
+  </figure>
+
+  <h3>Text lists the path mode adds</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>List</th><th>Value</th><th>Text</th><th>On</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">TL_Block</td><td>5 · 6 · 7</td><td>rectangle, 7 lin · circle ccw, one run · circle cw, one run</td><td>A39, Robot move screen block field (read only for 5–7)</td></tr>
+      <tr><td class="mono">TL_Move</td><td>15</td><td>rectangle, sides 1 to 4</td><td>A34</td></tr>
+      <tr><td class="mono">TL_MoveDrum</td><td>11</td><td>circle, one run</td><td>A34 when the active job is 2</td></tr>
+      <tr><td class="mono">TL_Err</td><td>16</td><td>path longer than 7 poses</td><td>A35, A38</td></tr>
+      <tr><td class="mono">TL_JobErr</td><td>6</td><td>scan from here not possible: robot not referenced, or no length and width</td><td>A31</td></tr>
+      <tr><td class="mono">alarms</td><td>bit 16</td><td>engine: path longer than 7 poses</td><td>A46</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note"><b>One tag, one writer, the additions of the path mode.</b> "DB_RobotPath".aoudtP and .aorBlend: the engine, through InOut pins, RW. "DB_Recipe".xPathMode: the Automatic screen. "DB_App".Path.Seg[n].X … R2 and .Blend: no writer and no reader any more. Everything else as in BLOCK_MAP.md.</div>
+
+  <div class="foot">Sources: the files of the folder Gantry_Robot (the side folder "robot pose solution" was merged into it on 2026-11-04), your OB30 of 2026-10-29, MOVIKIT Robotics manual 33956901 (05/2026) chapters 8.3.2, 8.3.3, 11.2.5, 13.6. Not in TIA, not tested on the machine.</div>
+</div>

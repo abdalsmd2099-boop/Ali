@@ -1,0 +1,67 @@
+FUNCTION_BLOCK "FB_Teach"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// stage 2 step 4. one button stores the actual robot pose into db_poses, pose n.
+// the only writer of db_poses besides the hmi fields. runs in ob1, instance "IDB_Teach".
+   VAR_INPUT
+      i_xTeach : Bool;                    // hmi button, momentary. edge inside
+      i_xClearPose : Bool;                // hmi button, momentary: pose n is not taught any more
+      i_intPoseNr : Int;                  // 1..50
+      i_xAllowed : Bool;                  // hand mode, auto off, engine not busy
+      i_xActualValid : Bool;              // robot referenced and comm ok, else the actual pose means nothing
+      i_udtActual : "UDT_Pose";           // "DB_Robot".Status.udtPoseBcs
+   END_VAR
+
+   VAR_OUTPUT
+      o_xTaught : Bool;                   // one cycle
+      o_xRefused : Bool;                  // one cycle: not allowed, actual not valid, or n out of range
+      o_intLastTaught : Int;              // pose number of the last teach
+   END_VAR
+
+   VAR_IN_OUT
+      io_aoudtP : Array[1..50] of "UDT_Pose";   // "DB_Poses".aoudtP
+      io_aoxValid : Array[1..50] of Bool;       // "DB_Poses".aoxValid
+   END_VAR
+
+   VAR
+      xTeachOld : Bool;
+      xClearOld : Bool;
+   END_VAR
+
+   VAR_TEMP
+      tmp_xTeachEdge : Bool;
+      tmp_xClearEdge : Bool;
+      tmp_xInRange : Bool;
+   END_VAR
+
+BEGIN
+   #tmp_xTeachEdge := #i_xTeach AND NOT #xTeachOld;
+   #xTeachOld := #i_xTeach;
+   #tmp_xClearEdge := #i_xClearPose AND NOT #xClearOld;
+   #xClearOld := #i_xClearPose;
+
+   #o_xTaught := FALSE;
+   #o_xRefused := FALSE;
+
+   // range check on its own line, rule 8
+   #tmp_xInRange := #i_intPoseNr >= 1 AND #i_intPoseNr <= 50;
+
+   IF #tmp_xTeachEdge THEN
+      IF #tmp_xInRange AND #i_xAllowed AND #i_xActualValid THEN
+         #io_aoudtP[#i_intPoseNr] := #i_udtActual;
+         #io_aoxValid[#i_intPoseNr] := TRUE;
+         #o_intLastTaught := #i_intPoseNr;
+         #o_xTaught := TRUE;
+      ELSE
+         #o_xRefused := TRUE;
+      END_IF;
+   END_IF;
+
+   IF #tmp_xClearEdge THEN
+      IF #tmp_xInRange AND #i_xAllowed THEN
+         #io_aoxValid[#i_intPoseNr] := FALSE;
+      ELSE
+         #o_xRefused := TRUE;
+      END_IF;
+   END_IF;
+END_FUNCTION_BLOCK

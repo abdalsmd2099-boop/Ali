@@ -1,0 +1,80 @@
+DATA_BLOCK "DB_Recipe"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.5
+// the numbers of the objects to scan. retentive. written by the hmi only, read by the jobs.
+// 2026-11-02. a db of its own, so "DB_Poses" in the plc is never touched by a download and
+// the taught poses stay. later: one row per cube size / drum type, the operator picks a name.
+//
+// cube (fb_scancubejob): corner 1 is taught, pose 4, or the actual pose with xFromHere. with
+// length and width > 0 the job computes corners 2, 3, 4 and the approach from it. with angle 0
+// corner 1 is the corner with the smallest x and the smallest y, side 1 runs along +x, side 2
+// along +y. the tool turns +90 deg at every corner, -180 at corner 1 to +180 back at corner 1.
+// drum (fb_scandrumjob): the center is taught, pose 8, or the actual pose with xFromHere.
+//
+// v0.2 (2026-11-02, path mode): xPathMode. off = every point is one move, one program start each
+// (the proven way). on = the rectangle or the circle is one program run on pose[1..7], block 5
+// (rectangle), 6 (circle ccw) or 7 (circle cw) of program 20. needs the engine v0.6, program 20
+// blocks 5 to 7 and Cfg.intBlocksInPrg20 = 7. automatic_today.md part 7.
+//
+// v0.3 (2026-11-04, no turn): xNoTurn. on = the cube job does not turn the tool at the corners,
+// the orientation of corner 1 stays all the way, the turn entries are not pushed. corner 1 may
+// then be taught at any rotz. for a test. off = the turns of v0.4 of the cube job.
+//
+// v0.4 (2026-11-09, the line scan): struct Line at the end, the numbers of fb_scanlinejob, job 3:
+// n straight lines at one height, serpentine (xZigzag), raster or patch scan (xIndexAlong). the
+// start of line 0 is pose 9 of "DB_Poses" or the actual pose with xFromHere. xNoTurn holds for
+// this job too. a re-import of this db sets every number back to 0: write them down first.
+//
+// v0.5 (2026-11-09, the same day): Line.xArea at the end of the struct, fb_scanlinejob v0.2: the area
+// by two corners, pose 9 = corner 1 and pose 10 = the opposite corner. the job takes the length and the
+// number of lines from them, the lines field and the sign of the pitch are then not used. off = v0.4.
+   VAR RETAIN
+      Cube : STRUCT
+         rLength : Real;                      // mm, side 1 from corner 1 to corner 2. 0 = the job uses the taught corners 5, 6, 7
+         rWidth : Real;                       // mm, side 2 from corner 2 to corner 3
+         rAngle : Real;                       // deg, direction of side 1 in the base system. 0 = +x, 90 = +y
+      END_STRUCT;
+
+      Drum : STRUCT
+         rZ : Real;                           // mm, scan height
+         rRadius : Real;                      // mm, drum radius + sensor distance. 0 = job error 5
+         rStartAngle : Real;                  // not used: the circle starts where the tool stands at rotz -180. kept, reserved
+         rRotZOffset : Real;                  // deg, tool rotz when it looks along +x. found once by jogging
+         xClockwise : Bool;                   // false = ccw (block 3, or 6 in path mode), true = cw (block 4, or 7)
+      END_STRUCT;
+
+      xFromHere : Bool;                       // operator switch "scan from here", both jobs: start takes the actual pose
+                                              // as corner 1 or as the drum center, nothing is taught or stored. retentive
+      xPathMode : Bool;                       // operator switch "path mode", both jobs (v0.2): the rectangle or the circle
+                                              // is one program run on pose[1..7]. off = one move per point, as proven
+      xNoTurn : Bool;                         // operator switch "no turn", both jobs (v0.3; the drum since 2026-11-06, comment only,
+                                              // no new field): cube job v0.6 keeps the orientation of corner 1 and leaves the four
+                                              // turn moves out. drum job v0.5 keeps the rotz of the center on every point of the
+                                              // circle, the tool does not turn toward the axis. retentive
+
+      Line : STRUCT                           // v0.4 (2026-11-09): fb_scanlinejob, job 3. all retentive, hmi writes
+         rLength : Real;                      // mm, the patch: the scanned part of every line. 0 = job error 5
+         rPitch : Real;                       // mm, start to start between two lines. + = the next line to the left of the
+                                              // line direction (+90 deg), - = to the right. 0 = job error 5
+         intCount : Int;                      // lines, 1 .. 5000 (50 in v0.4). outside = job error 5. not used with xArea
+         rLeadIn : Real;                      // mm, the line begins this much before the patch and ends this much after it:
+                                              // the ramps lie outside the patch. 0 allowed. 50 at 200 mm/s and 1 m/s2
+         rAngle : Real;                       // deg, direction of the lines. 0 = +x, 90 = +y
+         rZ : Real;                           // mm, scan height
+         rFaceZ : Real;                       // mm, the face. 0 = not checked. smaller z is up: rZ >= rFaceZ = job error 9
+         rRotZOffset : Real;                  // deg, the tool rotz when it looks along +x (as Drum.rRotZOffset). used with no turn off
+         xZigzag : Bool;                      // false = raster, every line the same way, the index move is the long diagonal back.
+                                              // true = serpentine, every odd line runs backwards
+         xIndexAlong : Bool;                  // false = the next line lies beside this one (raster, serpentine).
+                                              // true = further along the same line: the patch scan, pitch > length
+         xLiftBetween : Bool;                 // false = the index move at the scan height. true = lift, travel, down between two lines
+         rLiftZ : Real;                       // mm, the height of the travel with xLiftBetween. 0 = "DB_Poses".rSafeZ
+         xArea : Bool;                        // v0.5: on = the area by pose 9 (corner 1) and pose 10 (the opposite corner): length and
+                                              // lines are computed, the side comes from corner 2. with xIndexAlong the patches run
+                                              // from corner 1 toward corner 2, the patch length stays rLength. off = as v0.4
+      END_STRUCT;
+   END_VAR
+
+BEGIN
+
+END_DATA_BLOCK

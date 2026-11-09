@@ -1,0 +1,370 @@
+FUNCTION_BLOCK "FB_ScanDrumJob"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.6
+// 2026-10-31. one button, one drum scan. same shape as fb_scancubejob: build a list,
+// check every pose, push, count. no motion code, the engine does the rest.
+// runs in ob1 next to fb_scancubejob, instance "IDB_ScanDrumJob". fc_jobmux picks which
+// job reaches the queue.
+//
+// the drum stands on the floor, axis vertical. the scan is a circle around the drum at
+// one height, the tool looking at the drum axis. program 20 blocks 3 (ccw) and 4 (cw),
+// radius in real[51], arc angle 90 in real[52], end point in pose[51].
+//
+// what it needs (hmi_stage2.md section 5):
+//    pose 8      the drum center: jog the tool above the drum axis, any height, TEACH 8.
+//                only x, y and roty of pose 8 are used. with i_xFromHere the actual pose is the
+//                center instead, nothing is stored, the list begins with "above p0" (index 2)
+//    pose 2      start, pose 1 home (optional), rSafeZ, as for the cube
+//    Drum.rZ           scan height, mm
+//    Drum.rRadius      drum radius + sensor distance, mm
+//    Drum.rRotZOffset  deg, the tool rotz when it looks along +x. found once by jogging
+//    Drum.xClockwise   false = ccw, true = cw
+//    Drum.rStartAngle  not used: the circle starts at the point where the tool, looking at the
+//                      axis, stands at rotz -180 (ccw) or +180 (cw). the pin stays
+//
+// v0.4 (2026-11-02, path mode. one file since 2026-11-04): with i_xPathMode the four arcs go out as
+// ONE queue entry with block 6 (ccw) or 7 (cw) and the four end points in aoudtPath, pose[1..4]
+// on the robot, one program run. the moves before (to start, above p0, down to p0) and after
+// (lift, start, home) stay single moves. the path entry has id 11, hmi text TL_MoveDrum 11
+// "circle". needs fb_robotmove v0.6 and blocks 6 and 7 in program 20. off = v0.3, with one
+// correction: the lift (list 8) keeps the orientation of the last arc, +180 or -180, instead of
+// the orientation of p0, so the tool does not turn a full circle on the way up.
+//
+// v0.5 (2026-11-06): "no turn", i_xNoTurn = "DB_Recipe".xNoTurn, the same switch as the cube job
+// v0.6. on = every point of the circle keeps the rotz of the center (pose 8 as taught, or the
+// actual pose with "scan from here"); the arcs carry that rotz unchanged from start to end, the
+// tool does not turn toward the axis, nothing goes from -180 to +180. the list stays the same,
+// 10 moves: the drum has no turn entries of its own, the turn sat inside the arcs. for the
+// first scan, or a sensor that does not care which side it faces. off = exactly v0.4.
+//
+// v0.6 (2026-11-06): the circle in one run, without a stop. with i_xPathMode the circle goes out
+// as ONE entry with block 6 (ccw) or 7 (cw), and on the robot that block is ONE motion line:
+// circ_var centerangle (manual 6.16.3), center := pose[51], angle := real[52] = 360, after a
+// set_abs_rel_pos circauxpos absolute (manual 11.10.4). the entry carries the center as its pose
+// (x, y of pose 8, z = scan height, orientation of p0), the radius in real[51] (the engine's
+// check), 360 in real[52], and no path (intPathLen 0). the robot drives from p0 once around the
+// center and ends at p0. the line has no end pose, the tool keeps its orientation on the whole
+// circle, so in this mode every point takes the rotz of the center, as with no turn, whatever
+// i_xNoTurn says; a tool that turns along the circle comes with the tangential control later.
+// 7 entries: 1, 2, 3, the circle (id 11), 8, 9, 10. replaces the form of v0.4 (four circ lines on
+// pose[1..4]), which was never built on the robot. needs fb_robotmove v0.7 (the long time for
+// blocks 6 and 7) and Cfg.intBlocksInPrg20 = 7. off = parts a to e of the drum checklist.
+//
+// the list (intId = list index):
+//     1 start (2)            2 above p0 at safe z      3 down to p0, slow
+//     4 arc to p1            5 arc to p2               6 arc to p3            7 arc to p0
+//     8 lift to safe z       9 start (2)              10 home (1), only if pose 1 is taught
+//    11 = the path entry of path mode: list 4..7 in one program run
+//
+// p_k = center + r * (cos a_k, sin a_k),  a_k = -offset +/- k * 90 deg
+// rotz_k = -180 + k * 90 (ccw) or 180 - k * 90 (cw): the tool looks at the center and turns
+// 90 deg per quarter without a wrap, -180 .. +180 over the full circle
+   VAR_INPUT
+      i_xStart : Bool;                          // hmi button, momentary, gated by Man.intJob = 2 in ob1
+      i_xAbort : Bool;                          // hmi button, momentary. also clears a job error
+      i_xAuto : Bool;                           // auto switch and enable. falls while running = abort
+      i_intOverride : Int;                      // % for every move
+      i_aoudtP : Array[1..50] of "UDT_Pose";    // "DB_Poses".aoudtP
+      i_aoxValid : Array[1..50] of Bool;        // "DB_Poses".aoxValid
+      i_rSafeZ : Real;                          // "DB_Poses".rSafeZ
+      i_rZ : Real;                              // "DB_Recipe".Drum.rZ
+      i_rRadius : Real;                         // "DB_Recipe".Drum.rRadius
+      i_rStartAngle : Real;                     // "DB_Recipe".Drum.rStartAngle. not used, kept so the call does not change
+      i_rRotZOffset : Real;                     // "DB_Recipe".Drum.rRotZOffset
+      i_xClockwise : Bool;                      // "DB_Recipe".Drum.xClockwise
+      i_udtMoveState : "UDT_MoveState";         // "DB_RobotMove".State
+      i_intQueueCount : Int;                    // "DB_MoveQueue".intCount
+      i_xFromHere : Bool;                       // "DB_Recipe".xFromHere: the actual pose is the center
+      i_udtActual : "UDT_Pose";                 // "DB_Robot".Status.udtPoseBcs
+      i_xActualValid : Bool;                    // "DB_Robot".Status.xReferenced AND .xCommOK
+      i_xPathMode : Bool;                       // "DB_Recipe".xPathMode: the circle as one program run   (v0.4)
+      i_xNoTurn : Bool;                         // "DB_Recipe".xNoTurn: the tool keeps the rotz of the center, no turn on the circle   (v0.5)
+   END_VAR
+
+   VAR_OUTPUT
+      o_udtOut : "UDT_JobOut";                  // => "DB_RobotJob".Drum
+   END_VAR
+
+   VAR
+      intStep : Int;                            // 0 idle, 10 build, 20 push, 30 run, 90 error
+      xStartOld : Bool;
+      xAbortOld : Bool;
+      aoudtPoseList : Array[1..10] of "UDT_Pose";
+      aoudtList : Array[1..10] of "UDT_MoveReq";   // one single move per list index
+      aoudtOut : Array[1..10] of "UDT_MoveReq";    // v0.4: what is pushed, in order
+      intOutLen : Int;
+      intListLen : Int;
+      intPushIdx : Int;
+      intFirst : Int;                           // first list index that is pushed: 1, or 2 with "scan from here"
+   END_VAR
+
+   VAR_TEMP
+      tmp_xStartEdge : Bool;
+      tmp_xAbortEdge : Bool;
+      tmp_i : Int;
+      tmp_k : Int;
+      tmp_intErr : Int;
+      tmp_intPoseErr : Int;
+      tmp_rAngle : Real;
+      tmp_rRad : Real;
+      tmp_rRotZ : Real;
+      tmp_udtP0 : "UDT_Pose";
+      tmp_udtCenter : "UDT_Pose";
+   END_VAR
+
+   VAR CONSTANT
+      P_HOME : Int := 1;
+      P_START : Int := 2;
+      P_CENTER : Int := 8;
+      BLOCK_LIN : Int := 1;                     // program 20 block 1, linear normal
+      BLOCK_LIN_SLOW : Int := 2;                // block 2, linear slow
+      BLOCK_CIRC_CCW : Int := 3;                // block 3, circle counter-clockwise, one quarter
+      BLOCK_CIRC_CW : Int := 4;                 // block 4, circle clockwise, one quarter
+      BLOCK_PATH_CCW : Int := 6;                // v0.6: block 6, the full circle ccw in one line, center in pose[51], 360 in real[52]
+      BLOCK_PATH_CW : Int := 7;                 // v0.6: block 7, the same clockwise
+      ID_PATH : Int := 11;                      // v0.4: id of the path entry, hmi text TL_MoveDrum 11
+      PATH_FIRST : Int := 4;                    // v0.4: list 4..7 go into the path entry
+      PATH_LAST : Int := 7;
+      DEG_TO_RAD : Real := 0.017453293;         // pi / 180
+      CIRC_FULL : Real := 360.0;                // v0.6: real[52] of the one-run circle, the angle of the full circle
+   END_VAR
+
+BEGIN
+   // ---- edges and pulses -------------------------------------------------------
+   #tmp_xStartEdge := #i_xStart AND NOT #xStartOld;
+   #xStartOld := #i_xStart;
+   #tmp_xAbortEdge := #i_xAbort AND NOT #xAbortOld;
+   #xAbortOld := #i_xAbort;
+
+   #o_udtOut.xPushReq := FALSE;
+   #o_udtOut.xClear := FALSE;
+   #o_udtOut.udtState.xDone := FALSE;
+
+   // ---- abort while running: button, auto off, or the engine went into error ---------
+   IF #intStep >= 10 AND #intStep <= 30 THEN
+      IF #tmp_xAbortEdge OR NOT #i_xAuto THEN
+         #o_udtOut.xClear := TRUE;              // the running move finishes, nothing follows
+         #o_udtOut.udtState.xRunning := FALSE;
+         #intStep := 0;
+      ELSIF #i_udtMoveState.xError THEN
+         #o_udtOut.xClear := TRUE;
+         #o_udtOut.udtState.intErrId := 10;
+         #o_udtOut.udtState.intEngineErr := #i_udtMoveState.intErrId;
+         #o_udtOut.udtState.intMoveActive := #i_udtMoveState.intIdActive;
+         #intStep := 90;
+      END_IF;
+   END_IF;
+
+   CASE #intStep OF
+      0: // idle
+         #o_udtOut.udtState.xRunning := FALSE;
+         IF #tmp_xStartEdge AND #i_xAuto THEN
+            #o_udtOut.udtState.xError := FALSE;
+            #o_udtOut.udtState.intErrId := 0;
+            #o_udtOut.udtState.intEngineErr := 0;
+            #intStep := 10;
+         END_IF;
+
+      10: // build the list and check it. nothing goes out of this block yet
+         #tmp_intErr := 0;
+         IF NOT #i_aoxValid[#P_START] OR (NOT #i_aoxValid[#P_CENTER] AND NOT #i_xFromHere) THEN
+            #tmp_intErr := 1;                   // start or drum center not taught
+         END_IF;
+         IF #i_xFromHere AND NOT #i_xActualValid THEN
+            #tmp_intErr := 6;                   // scan from here: the actual pose is not valid
+         END_IF;
+         IF #i_rSafeZ <= 0.0 THEN
+            #tmp_intErr := 2;                   // safe z not set
+         END_IF;
+         IF #i_udtMoveState.xBusy OR #i_udtMoveState.xError THEN
+            #tmp_intErr := 3;                   // engine busy or in error
+         END_IF;
+         IF #i_rRadius <= 0.0 THEN
+            #tmp_intErr := 5;                   // radius not set
+         END_IF;
+
+         IF #tmp_intErr = 0 THEN
+            // the center: the actual pose with "scan from here", else pose 8
+            IF #i_xFromHere THEN
+               #tmp_udtCenter := #i_udtActual;
+               #intFirst := 2;                  // the robot stands above the center: begin with "above p0"
+            ELSE
+               #tmp_udtCenter := #i_aoudtP[#P_CENTER];
+               #intFirst := 1;
+            END_IF;
+
+            // the four points on the circle. the circle starts where the tool, looking at the
+            // center, stands at rotz -180 (ccw) or +180 (cw): the point at angle -offset. from
+            // there the tool turns 90 deg per quarter without a wrap
+            FOR #tmp_k := 0 TO 4 DO
+               IF #i_xClockwise THEN
+                  #tmp_rAngle := -#i_rRotZOffset - INT_TO_REAL(#tmp_k) * 90.0;
+                  #tmp_rRotZ := 180.0 - INT_TO_REAL(#tmp_k) * 90.0;
+               ELSE
+                  #tmp_rAngle := -#i_rRotZOffset + INT_TO_REAL(#tmp_k) * 90.0;
+                  #tmp_rRotZ := -180.0 + INT_TO_REAL(#tmp_k) * 90.0;
+               END_IF;
+               #tmp_rRad := #tmp_rAngle * #DEG_TO_RAD;
+
+               // list index 3 = p0, 4 = p1, 5 = p2, 6 = p3, 7 = p0 again
+               #aoudtPoseList[3 + #tmp_k].rX := #tmp_udtCenter.rX + #i_rRadius * COS(#tmp_rRad);
+               #aoudtPoseList[3 + #tmp_k].rY := #tmp_udtCenter.rY + #i_rRadius * SIN(#tmp_rRad);
+               #aoudtPoseList[3 + #tmp_k].rZ := #i_rZ;
+               #aoudtPoseList[3 + #tmp_k].rRotZ := #tmp_rRotZ;
+               #aoudtPoseList[3 + #tmp_k].rRotY := #tmp_udtCenter.rRotY;
+            END_FOR;
+
+            // v0.5: no turn. p0 .. p3 and p0 again take the rotz of the center, so every arc
+            // starts and ends with the same orientation and the robot keeps it along the arc.
+            // "above p0" and "lift" copy these points below and keep it too.
+            // v0.6: the one-run circle has no end pose, the orientation cannot change on it:
+            // path mode takes the rotz of the center too
+            IF #i_xNoTurn OR #i_xPathMode THEN
+               FOR #tmp_k := 3 TO 7 DO
+                  #aoudtPoseList[#tmp_k].rRotZ := #tmp_udtCenter.rRotZ;
+               END_FOR;
+            END_IF;
+            #tmp_udtP0 := #aoudtPoseList[3];
+
+            #aoudtPoseList[1] := #i_aoudtP[#P_START];          // start
+            #aoudtPoseList[2] := #tmp_udtP0;                    // above p0
+            #aoudtPoseList[2].rZ := #i_rSafeZ;
+            #aoudtPoseList[8] := #aoudtPoseList[7];             // lift, with the last orientation
+            #aoudtPoseList[8].rZ := #i_rSafeZ;
+            #aoudtPoseList[9] := #i_aoudtP[#P_START];          // start
+            #intListLen := 9;
+            IF #i_aoxValid[#P_HOME] THEN
+               #aoudtPoseList[10] := #i_aoudtP[#P_HOME];       // home
+               #intListLen := 10;
+            END_IF;
+
+            // every pose that will be pushed is checked before the first one goes out, rule 9
+            FOR #tmp_i := #intFirst TO #intListLen DO
+               #tmp_intPoseErr := "FC_PoseCheck"(i_udtPose := #aoudtPoseList[#tmp_i]);
+               IF #tmp_intPoseErr <> 0 AND #tmp_intErr = 0 THEN
+                  #tmp_intErr := 4;             // a pose of the job is outside the limits
+                  #o_udtOut.udtState.intMoveActive := #tmp_i;
+               END_IF;
+
+               // block per list index: 3 slow down, 4..7 circle, the rest linear
+               IF #tmp_i = 3 THEN
+                  #aoudtList[#tmp_i].intBlock := #BLOCK_LIN_SLOW;
+               ELSIF #tmp_i >= 4 AND #tmp_i <= 7 THEN
+                  IF #i_xClockwise THEN
+                     #aoudtList[#tmp_i].intBlock := #BLOCK_CIRC_CW;
+                  ELSE
+                     #aoudtList[#tmp_i].intBlock := #BLOCK_CIRC_CCW;
+                  END_IF;
+               ELSE
+                  #aoudtList[#tmp_i].intBlock := #BLOCK_LIN;
+               END_IF;
+
+               #aoudtList[#tmp_i].udtPose := #aoudtPoseList[#tmp_i];
+               #aoudtList[#tmp_i].udtPose2 := #aoudtPoseList[#tmp_i];
+               #aoudtList[#tmp_i].rBlend := 0.0;
+               IF #tmp_i >= 4 AND #tmp_i <= 7 THEN
+                  #aoudtList[#tmp_i].aorPar[1] := #i_rRadius;   // real[51] = radius, program20.md
+                  #aoudtList[#tmp_i].aorPar[2] := 90.0;         // real[52] = arc angle, for a circle line written as radius + angle
+               ELSE
+                  #aoudtList[#tmp_i].aorPar[1] := 0.0;
+                  #aoudtList[#tmp_i].aorPar[2] := 0.0;
+               END_IF;
+               #aoudtList[#tmp_i].aorPar[3] := 0.0;
+               #aoudtList[#tmp_i].intOverride := #i_intOverride;
+               #aoudtList[#tmp_i].xStopOnSensor := FALSE;
+               #aoudtList[#tmp_i].intId := #tmp_i;
+               #aoudtList[#tmp_i].intPathLen := 0;           // v0.4: a single move
+            END_FOR;
+
+            // v0.4: what goes out, in order
+            #intOutLen := 0;
+            IF #i_xPathMode THEN
+               FOR #tmp_i := #intFirst TO #PATH_FIRST - 1 DO          // the singles before the circle
+                  #intOutLen := #intOutLen + 1;
+                  #aoudtOut[#intOutLen] := #aoudtList[#tmp_i];
+               END_FOR;
+               #intOutLen := #intOutLen + 1;                            // the circle, one entry, one line on the robot (v0.6)
+               #aoudtOut[#intOutLen] := #aoudtList[#PATH_LAST];         // radius, override, blend from the last arc
+               IF #i_xClockwise THEN
+                  #aoudtOut[#intOutLen].intBlock := #BLOCK_PATH_CW;
+               ELSE
+                  #aoudtOut[#intOutLen].intBlock := #BLOCK_PATH_CCW;
+               END_IF;
+               #aoudtOut[#intOutLen].intId := #ID_PATH;
+               // v0.6: pose[51] = the center of the circle, absolute, at the scan height, with the
+               // orientation of p0. the robot takes x and y of it, the engine checks all of it
+               #aoudtOut[#intOutLen].udtPose := #tmp_udtP0;
+               #aoudtOut[#intOutLen].udtPose.rX := #tmp_udtCenter.rX;
+               #aoudtOut[#intOutLen].udtPose.rY := #tmp_udtCenter.rY;
+               #aoudtOut[#intOutLen].udtPose2 := #aoudtOut[#intOutLen].udtPose;
+               #aoudtOut[#intOutLen].aorPar[2] := #CIRC_FULL;            // real[52] = 360, the full circle
+               #aoudtOut[#intOutLen].intPathLen := 0;                    // no pose[1..7], the robot needs none
+               FOR #tmp_i := #PATH_LAST + 1 TO #intListLen DO           // lift, start, home
+                  #intOutLen := #intOutLen + 1;
+                  #aoudtOut[#intOutLen] := #aoudtList[#tmp_i];
+               END_FOR;
+            ELSE
+               FOR #tmp_i := #intFirst TO #intListLen DO
+                  #intOutLen := #intOutLen + 1;
+                  #aoudtOut[#intOutLen] := #aoudtList[#tmp_i];
+               END_FOR;
+            END_IF;
+         END_IF;
+
+         IF #tmp_intErr <> 0 THEN
+            #o_udtOut.udtState.intErrId := #tmp_intErr;
+            #intStep := 90;
+         ELSE
+            #o_udtOut.xClear := TRUE;           // whatever was left in the queue goes
+            #intPushIdx := 1;
+            #o_udtOut.udtState.intMovesTotal := #intOutLen;
+            #o_udtOut.udtState.intMovesDone := 0;
+            #o_udtOut.udtState.intMoveActive := 0;
+            #o_udtOut.udtState.xRunning := TRUE;
+            #intStep := 20;
+         END_IF;
+
+      20: // push one entry per cycle
+         #o_udtOut.udtPush := #aoudtOut[#intPushIdx];
+         #o_udtOut.xPushReq := TRUE;
+         #intPushIdx := #intPushIdx + 1;
+         IF #intPushIdx > #intOutLen THEN
+            #intStep := 30;
+         END_IF;
+
+      30: // run. the engine eats the queue, this block only counts
+         IF #i_udtMoveState.xBusy THEN
+            #o_udtOut.udtState.intMoveActive := #i_udtMoveState.intIdActive;
+         END_IF;
+         IF #i_udtMoveState.xDone THEN
+            #o_udtOut.udtState.intMovesDone := #o_udtOut.udtState.intMovesDone + 1;
+         END_IF;
+         IF #i_intQueueCount = 0 AND NOT #i_udtMoveState.xBusy AND NOT #i_udtMoveState.xDone THEN
+            #o_udtOut.udtState.xRunning := FALSE;
+            #o_udtOut.udtState.xDone := TRUE;
+            #intStep := 0;
+         END_IF;
+
+      90: // error. stays until abort or the next start
+         #o_udtOut.udtState.xRunning := FALSE;
+         #o_udtOut.udtState.xError := TRUE;
+         IF #tmp_xAbortEdge THEN
+            #o_udtOut.udtState.xError := FALSE;
+            #o_udtOut.udtState.intErrId := 0;
+            #intStep := 0;
+         END_IF;
+   END_CASE;
+
+   #o_udtOut.udtState.intStep := #intStep;
+
+   // job error numbers (same numbers as the cube job, plus 5)
+   //  1 start or drum center not taught            4 a pose of the job is outside the limits, see intMoveActive
+   //  2 safe z not set                             5 drum radius not set
+   //  3 engine busy or in error at start           6 scan from here not possible: the robot is not referenced or comm is not ok
+   // 10 the engine went into error, see intEngineErr
+   // the engine needs "DB_RobotMove".Cfg.intBlocksInPrg20 = 4 (single moves) or 7 (path mode);
+   // path mode also needs fb_robotmove v0.7, the 300 s for blocks 6 and 7
+   // v0.5: with i_xNoTurn the rotz of every point is the rotz of the center. with the switch off
+   // the circle runs from rotz -180 to +180 (ccw) or +180 to -180 (cw), as in v0.4
+   // v0.6: in path mode the rotz of the center always, the one-run circle cannot turn the tool
+END_FUNCTION_BLOCK

@@ -1,0 +1,35 @@
+DATA_BLOCK "DB_RobotMove"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.3
+// the single movement: request in, state out. goals.md 4.1.
+// v0.2 (2026-11-06): start value of Cfg.intBlocksInPrg20 = 4, blocks 1 to 4 are in program 20
+// since 11-02. the first drum start at the machine stopped at move 3 (block 2) with engine error 1
+// because the field still held 1 after a download. retentive, but a download of this db puts the
+// start value back. 7 when blocks 6 and 7 are in (drum checklist part f)
+// v0.3 (2026-11-09): Cfg.rMinSpeed at the end, for fb_robotmove v0.8: the time limit of a move grows
+// by its way divided by this speed. 0 = the fixed 60 s / 300 s of before. 10 mm/s is a safe number
+// for the long lines of the line scan (4380 mm at override 10 take about 220 s). a download of this
+// db sets it back to 0: type it again (M43, or the watch table). by hand at the end is the safer way
+// writers:  hmi -> Cfg, Man      fc_moveselect -> Req, xReqStart      fb_robotmove -> State
+   VAR RETAIN
+      Cfg : STRUCT
+         intBlocksInPrg20 : Int := 4;   // how many gated blocks exist in program 20 today. +1 when a block is added. 4 since v0.2
+         rMinSpeed : Real := 0.0;       // v0.3: mm/s. the engine allows t_move + way / rMinSpeed for a move. 0 = t_move only
+      END_STRUCT;
+   END_VAR
+
+   VAR
+      Man : STRUCT                      // written by the hmi, stage 1 "move" screen
+         xEnable : Bool;                // hmi switch: manual moves allowed
+         xStart : Bool;                 // hmi button "move": set on press, reset on release. the fb takes the edge
+         xReset : Bool;                 // hmi button "reset": same
+         udtReq : "UDT_MoveReq";        // block, pose and override typed on the hmi
+      END_STRUCT;
+      Req : "UDT_MoveReq";              // the active request. one writer: fc_moveselect
+      xReqStart : Bool;                 // start for the active request. one writer: fc_moveselect
+      State : "UDT_MoveState";          // one writer: fb_robotmove
+   END_VAR
+
+BEGIN
+
+END_DATA_BLOCK

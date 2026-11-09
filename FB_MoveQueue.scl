@@ -1,0 +1,79 @@
+FUNCTION_BLOCK "FB_MoveQueue"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// stage 2 step 5. fifo of move requests, 50 deep. a job pushes at the tail,
+// the move engine eats the head through fc_moveselect.
+// runs in ob1 after the job and before fc_moveselect, instance "IDB_MoveQueue".
+// the only writer of "DB_MoveQueue".
+//
+// push, pop and clear are levels, not edges: every cycle the input is true, it acts once.
+// the job holds i_xPush for exactly one cycle per move. i_xPop is wired to the engine's
+// done pulse, which is one cycle by itself.
+   VAR_INPUT
+      i_xPush : Bool;                     // this cycle: store i_udtPush at the tail
+      i_udtPush : "UDT_MoveReq";
+      i_xPop : Bool;                      // this cycle: drop the head. "DB_RobotMove".State.xDone
+      i_xClear : Bool;                    // this cycle: empty the queue
+   END_VAR
+
+   VAR_OUTPUT
+      o_udtHead : "UDT_MoveReq";          // the oldest entry, valid when o_xHeadValid
+      o_xHeadValid : Bool;
+      o_intCount : Int;
+      o_xFull : Bool;
+      o_xPushRefused : Bool;              // one cycle: push on a full queue, nothing stored
+   END_VAR
+
+   VAR_IN_OUT
+      io_udtQ : "UDT_MoveQueue";          // "DB_MoveQueue".Q
+   END_VAR
+
+   VAR CONSTANT
+      SIZE : Int := 50;
+   END_VAR
+
+BEGIN
+   #o_xPushRefused := FALSE;
+
+   // first cycle after a download: the indexes are 0. range check on its own line, rule 8
+   IF #io_udtQ.intHead < 1 OR #io_udtQ.intHead > #SIZE OR #io_udtQ.intTail < 1 OR #io_udtQ.intTail > #SIZE THEN
+      #io_udtQ.intHead := 1;
+      #io_udtQ.intTail := 1;
+      #io_udtQ.intCount := 0;
+   END_IF;
+
+   IF #i_xClear THEN
+      #io_udtQ.intHead := 1;
+      #io_udtQ.intTail := 1;
+      #io_udtQ.intCount := 0;
+   END_IF;
+
+   // pop before push, so a full queue can take a new move in the cycle its head is done
+   IF #i_xPop AND NOT #i_xClear AND #io_udtQ.intCount > 0 THEN
+      #io_udtQ.intHead := #io_udtQ.intHead + 1;
+      IF #io_udtQ.intHead > #SIZE THEN
+         #io_udtQ.intHead := 1;
+      END_IF;
+      #io_udtQ.intCount := #io_udtQ.intCount - 1;
+   END_IF;
+
+   IF #i_xPush AND NOT #i_xClear THEN
+      IF #io_udtQ.intCount >= #SIZE THEN
+         #o_xPushRefused := TRUE;         // never overwrite, rule: refuse and report
+      ELSE
+         #io_udtQ.aoudtMove[#io_udtQ.intTail] := #i_udtPush;
+         #io_udtQ.intTail := #io_udtQ.intTail + 1;
+         IF #io_udtQ.intTail > #SIZE THEN
+            #io_udtQ.intTail := 1;
+         END_IF;
+         #io_udtQ.intCount := #io_udtQ.intCount + 1;
+      END_IF;
+   END_IF;
+
+   #o_intCount := #io_udtQ.intCount;
+   #o_xFull := #io_udtQ.intCount >= #SIZE;
+   #o_xHeadValid := #io_udtQ.intCount > 0;
+   IF #o_xHeadValid THEN
+      #o_udtHead := #io_udtQ.aoudtMove[#io_udtQ.intHead];
+   END_IF;
+END_FUNCTION_BLOCK

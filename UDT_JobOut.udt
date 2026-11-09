@@ -1,0 +1,14 @@
+TYPE "UDT_JobOut"
+VERSION : 0.1
+// 2026-10-31. what one job block hands out: its pushes to the queue and its state.
+// every job writes its own copy ("DB_RobotJob".Cube, .Drum), fc_jobmux copies the active one
+// into "DB_RobotJob".Push and .State. so the queue and the hmi still have one writer.
+// rule: a new field goes at the end. existing names never change.
+   STRUCT
+      xPushReq : Bool;                // true in a cycle that pushes udtPush
+      udtPush : "UDT_MoveReq";        // the move to push
+      xClear : Bool;                  // true in a cycle that empties the queue
+      udtState : "UDT_JobState";      // running, done, error, numbers
+   END_STRUCT;
+
+END_TYPE

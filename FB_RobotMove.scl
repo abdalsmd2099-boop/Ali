@@ -1,0 +1,415 @@
+FUNCTION_BLOCK "FB_RobotMove"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.8
+// the single movement. one request in, one move of program 20 on the robot, one state back.
+// one file, one line of versions. 2026-11-04: the side folder "robot pose solution" was merged
+// into this folder; the path mode is part of this block, switched by the request (intPathLen).
+// v0.2 (2026-10-29): step 20 also waits until the robot shows program 20 initialized or
+// finished (error 14 if not); step 40 keeps waiting while the robot repositions; t_run 3 s.
+// v0.3 (2026-10-29): step 5 checks the start conditions of manual 9.4: setpoints active
+// (error 5), override > 0 (error 8), program not paused (error 6).
+// v0.4 (2026-11-03): the gate of the block goes on the bus in step 10 with the pose, settle
+// 100 ms, step 30 only sets the start. the robot answered 125.57 "start edge ignored, not yet
+// ready for movement" when gate and start left the plc in the same cycle.
+// v0.5 (2026-11-03): the program stop before the start. after a jog, or after the setpoints were
+// off, the robot reports "repositioning required" (PI 2.6), and a start would first drive it back
+// to the point where it left the old path (manual 6.3, 6.6, 9.10). a program stop cancels that
+// and puts the program back to "initialized" (9.8). step 10 goes to the new step 15 when the
+// bit is set: State.xPrgStop TRUE on the bus (OB30 NW2 stop pin = Cmd.Stop OR State.xPrgStop),
+// wait for initialized without the request, stop FALSE, then step 20. error 15 when the robot
+// keeps the request for T_STOP. "program finished" is the normal state between two moves, a
+// start works from it, nothing clears it.
+// v0.6 (2026-11-02, path mode): a request may carry a path of up to 7 poses (udt_movereq v0.3,
+// aoudtPath, intPathLen). step 5 checks every path pose, step 10 writes them to
+// "DB_RobotPath".aoudtP[1..7] = srl pose[1..7], the module 1 standard path segments, before the
+// gate opens. the block of program 20 then drives them in one program run: block 5 rectangle
+// (7 lin), block 6 circle ccw (4 circ), block 7 circle cw. the engine does not know that either,
+// it only waits longer: t_move_path instead of t_move. intPathLen = 0 is a single move exactly
+// as before. new error 16: path longer than 7. the jobs set the path when "DB_Recipe".xPathMode is on.
+// v0.7 (2026-11-06): blocks 6 and 7 get t_move_path even without a path. the drum job v0.6 sends
+// the circle as ONE line of the robot (circ_var centerangle: the center in pose[51], the angle 360
+// in real[52], no pose[1..7], intPathLen 0), and a full circle at a low override does not fit into
+// t_move. one line in step 5, nothing else. (the file of the same version number in the critique
+// folder is a different change of the user's, not this one)
+// v0.8 (2026-11-09, the whole table): the time limit of a move grows with its length. one pin at
+// the end, i_rMinSpeed = "DB_RobotMove".Cfg.rMinSpeed in mm/s. when it is > 0, step 5 adds the way
+// of the move divided by it to t_move (or to t_move_path): the straight way from the actual pose to
+// the target, the sum of the segments of a path, or the arc of a circle block (radius times the
+// angle, 90 deg when none is given) when that is longer. 0 = exactly v0.7. a line of 4380 mm at
+// 20 mm/s needs 219 s, more than t_move; with rMinSpeed 10 the limit for it is 60 + 438 s.
+//
+// goals.md section 5. this block knows only the contract of program 20 (section 5.1):
+//    block n = gate bool[50+n]   target = pose[51]   parameters = real[51..53]
+//    run number = real[54]       echo: real[71] = block that ran, real[72] = run number
+//    path = pose[1..7]           (v0.6)
+// it does not know what a block does. a new block in program 20 is a new number, not new code here.
+//
+// runs in ob1, one instance "IDB_RobotMove". ob30 keeps the bus and the status map.
+// the only writer of: db_app.cmd.start, db_app.cmd.programnumber, db_app.cmd.override,
+//                     db_app.srl.pose, db_app.srl.par, db_app.srl.gate, db_app.srl.gateenable,
+//                     db_robotpath.aoudtp, db_robotpath.aorblend (v0.6)
+//
+// assumed types in db_app. if yours differ, change the io_ pins, nothing else:
+//    Srl.Pose   Array[1..5] of Real        Srl.Par   Array[1..4] of Real
+//    Srl.Gate   Array[1..8] of Bool        Srl.GateEnable   Bool
+//    Cmd.Start  Bool    Cmd.ProgramNumber  Int    Cmd.Override  Int
+
+   VAR_INPUT
+      i_xStart : Bool;                   // rising edge starts the move
+      i_xEnable : Bool;                  // moving allowed. falls while busy = abort, error 20
+      i_xReset : Bool;                   // clears the error
+      i_xSensorStop : Bool;              // reserved for the laser. read only when i_udtReq.xStopOnSensor
+      i_udtReq : "UDT_MoveReq";          // the move: block, pose, parameters, override, path
+      i_intBlocksInPrg20 : Int;          // "DB_RobotMove".Cfg.intBlocksInPrg20
+      i_udtStatus : "UDT_RobotStatus";   // "DB_Robot".Status
+      i_intEchoBlock : Int;              // srl real[71], "DB_MOVIKIT_ROBOTICS_Module2".SrlRealRaw[1]
+      i_intEchoRun : Int;                // srl real[72], "DB_MOVIKIT_ROBOTICS_Module2".SrlRealRaw[2]
+      i_rMinSpeed : Real;                // v0.8: "DB_RobotMove".Cfg.rMinSpeed, mm/s. the time limit of a move grows by its way / this. 0 = off
+   END_VAR
+
+   VAR_OUTPUT
+      o_udtState : "UDT_MoveState";      // => "DB_RobotMove".State
+   END_VAR
+
+   VAR_IN_OUT
+      io_aorSrlPose : Array[1..5] of Real;   // "DB_App".Srl.Pose   -> pose[51] x y z rotz roty
+      io_aorSrlPar : Array[1..4] of Real;    // "DB_App".Srl.Par    -> real[51..54]
+      io_aoxSrlGate : Array[1..8] of Bool;   // "DB_App".Srl.Gate   -> bool[51..58]
+      io_xGateEnable : Bool;                 // "DB_App".Srl.GateEnable
+      io_xStart : Bool;                      // "DB_App".Cmd.Start
+      io_intPrgNr : Int;                     // "DB_App".Cmd.ProgramNumber
+      io_intOverride : Int;                  // "DB_App".Cmd.Override
+      io_aoudtPath : Array[1..7] of "UDT_Pose";   // "DB_RobotPath".aoudtP  -> pose[1..7]   (v0.6)
+      io_aorPathBlend : Array[1..7] of Real;      // "DB_RobotPath".aorBlend -> segment blending   (v0.6)
+   END_VAR
+
+   VAR
+      intStep : Int;                     // 0 idle, 5 check, 10 write, 15 program stop, 20 settle, 30 go, 40 running, 50 finished, 60 end, 90 error
+      xStartOld : Bool;
+      intBlockAct : Int;                 // block of the move in progress
+      intRunNr : Int;                    // 1..30000, one per move, echoed by the robot
+      tMoveAct : Time;                   // v0.6: t_move for a single move, t_move_path for a path
+      tonSettle : TON_TIME;
+      tonPrg : TON_TIME;
+      tonRun : TON_TIME;
+      tonMove : TON_TIME;
+      tonStill : TON_TIME;
+      tonStop : TON_TIME;                // v0.5
+   END_VAR
+
+   VAR_TEMP
+      tmp_xStartEdge : Bool;
+      tmp_xFinished : Bool;
+      tmp_xPrgReady : Bool;
+      tmp_intErr : Int;
+      tmp_i : Int;
+      tmp_k : Int;
+      tmp_rDist : Real;                  // v0.8: the way of the move, mm
+      tmp_rArc : Real;                   // v0.8: the arc of a circle block, mm
+      tmp_rPX : Real;                    // v0.8: the point the way is measured from
+      tmp_rPY : Real;
+      tmp_rPZ : Real;
+   END_VAR
+
+   VAR CONSTANT
+      PRG_NR : Int := 20;                // the one robot program
+      DEG_TO_RAD : Real := 0.017453293;  // v0.8: pi / 180, the arc of a circle block
+      CIRC_FIRST : Int := 3;             // contract: blocks 3 and 4 are circles and need a radius in aorPar[1]
+      CIRC_LAST : Int := 4;
+      BLOCK_DRUM_CCW : Int := 6;         // v0.6: the drum circle blocks need a radius too. v0.7: and get t_move_path
+      BLOCK_DRUM_CW : Int := 7;
+      PATH_MAX : Int := 7;               // v0.6: pose[1..7], the seven segments of module 1
+      T_SETTLE : Time := T#100ms;        // pose and gate on the bus before the start edge, rule 4 (100 ms since 2026-11-03)
+      T_PRG : Time := T#3s;              // the robot must show program 20 initialized or finished within this
+      T_RUN : Time := T#3s;              // "program running" must come within this, repositioning time not counted
+      T_MOVE : Time := T#60s;            // a single move must finish within this
+      T_MOVE_PATH : Time := T#300s;      // v0.6: a path of up to 7 moves must finish within this
+      T_STILL : Time := T#200ms;         // finished and standstill must hold this long
+      T_STOP : Time := T#2s;             // v0.5: after the program stop the robot must show initialized, no repositioning request, within this
+      RUNNR_MAX : Int := 30000;
+   END_VAR
+
+BEGIN
+   // ---- edge and pulses ------------------------------------------------------
+   #tmp_xStartEdge := #i_xStart AND NOT #xStartOld;
+   #xStartOld := #i_xStart;
+   #o_udtState.xDone := FALSE;
+
+   // ---- reset, only out of the error step --------------------------------------
+   IF #i_xReset AND #intStep = 90 THEN
+      #o_udtState.xError := FALSE;
+      #o_udtState.intErrId := 0;
+      #o_udtState.uiMsgIdAtError := 0;
+      #o_udtState.xPrgStop := FALSE;
+      #intStep := 0;
+   END_IF;
+
+   // ---- timers, called every cycle so they never hold a stale state ----------------
+   #tmp_xFinished := #i_udtStatus.xPrgFinished AND NOT #i_udtStatus.xMoving AND #i_udtStatus.intRemainingSeg = 0;
+   // the robot has taken program 20 and can take a start: manual 6.3, a program can be
+   // started when it is initialized or finished
+   #tmp_xPrgReady := #i_udtStatus.intPrgNr = #PRG_NR AND (#i_udtStatus.xPrgInitialized OR #i_udtStatus.xPrgFinished);
+   #tonSettle(IN := #intStep = 20, PT := #T_SETTLE);
+   #tonPrg(IN := #intStep = 20, PT := #T_PRG);
+   // a start after jogging first repositions the robot onto the path. "running" comes after
+   // that, so the run timer does not count while repositioning is active
+   #tonRun(IN := #intStep = 40 AND NOT #i_udtStatus.xRepositionActive, PT := #T_RUN);
+   IF #tMoveAct = T#0s THEN
+      #tMoveAct := #T_MOVE;              // first cycle after a download
+   END_IF;
+   #tonMove(IN := #intStep = 50, PT := #tMoveAct);
+   #tonStill(IN := #intStep = 50 AND #tmp_xFinished, PT := #T_STILL);
+   #tonStop(IN := #intStep = 15, PT := #T_STOP);   // v0.5
+
+   // ---- abort while a move is in progress ------------------------------------------
+   IF #intStep >= 10 AND #intStep <= 50 THEN
+      #tmp_intErr := 0;
+      IF NOT #i_udtStatus.xCommOK THEN
+         #tmp_intErr := 7;
+      ELSIF #i_udtStatus.xFault THEN
+         #tmp_intErr := 21;
+      ELSIF NOT #i_udtStatus.xAccessGranted THEN
+         #tmp_intErr := 22;
+      ELSIF NOT #i_xEnable THEN
+         #tmp_intErr := 20;
+      END_IF;
+      IF #tmp_intErr <> 0 THEN
+         #o_udtState.intErrId := #tmp_intErr;
+         #intStep := 90;
+      END_IF;
+   END_IF;
+
+   CASE #intStep OF
+      0: // idle. nothing on the bus changes
+         #o_udtState.xBusy := FALSE;
+         IF #tmp_xStartEdge AND #i_xEnable AND NOT #o_udtState.xError THEN
+            #intStep := 5;
+         END_IF;
+
+      5: // check, one cycle, nothing touches the bus
+         #tmp_intErr := 0;
+         IF #i_udtReq.intBlock < 1 OR #i_udtReq.intBlock > 8 OR #i_udtReq.intBlock > #i_intBlocksInPrg20 THEN
+            #tmp_intErr := 1;
+         ELSE
+            #tmp_intErr := "FC_PoseCheck"(i_udtPose := #i_udtReq.udtPose);   // 0, 2 or 3
+         END_IF;
+         // v0.6: every pose of the path is checked before anything goes out, rule 9
+         IF #tmp_intErr = 0 THEN
+            IF #i_udtReq.intPathLen < 0 OR #i_udtReq.intPathLen > #PATH_MAX THEN
+               #tmp_intErr := 16;
+            ELSE
+               FOR #tmp_k := 1 TO #i_udtReq.intPathLen DO
+                  IF #tmp_intErr = 0 THEN
+                     #tmp_intErr := "FC_PoseCheck"(i_udtPose := #i_udtReq.aoudtPath[#tmp_k]);
+                  END_IF;
+               END_FOR;
+            END_IF;
+         END_IF;
+         IF #tmp_intErr = 0 THEN
+            IF ((#i_udtReq.intBlock >= #CIRC_FIRST AND #i_udtReq.intBlock <= #CIRC_LAST)
+                OR #i_udtReq.intBlock = #BLOCK_DRUM_CCW OR #i_udtReq.intBlock = #BLOCK_DRUM_CW)
+               AND #i_udtReq.aorPar[1] <= 0.0 THEN
+               #tmp_intErr := 4;
+            ELSIF NOT #i_udtStatus.xCommOK THEN
+               #tmp_intErr := 7;
+            ELSIF NOT #i_udtStatus.xReady OR NOT #i_udtStatus.xReferenced OR NOT #i_udtStatus.xAutomatic
+                  OR NOT #i_udtStatus.xAccessGranted OR #i_udtStatus.xFault
+                  OR NOT #i_udtStatus.xSetpointActive THEN
+               #tmp_intErr := 5;
+            ELSIF #i_udtStatus.xMoving OR #i_udtStatus.xPrgRunning OR #i_udtStatus.xPrgPaused THEN
+               #tmp_intErr := 6;
+            ELSIF #i_udtReq.intOverride <= 0 AND #io_intOverride <= 0 THEN
+               #tmp_intErr := 8;                // rule 7: override never 0, the robot would not move
+            END_IF;
+         END_IF;
+         IF #tmp_intErr <> 0 THEN
+            #o_udtState.intErrId := #tmp_intErr;
+            #intStep := 90;
+         ELSE
+            #o_udtState.xBusy := TRUE;
+            #intBlockAct := #i_udtReq.intBlock;
+            #o_udtState.intBlockActive := #intBlockAct;
+            #o_udtState.intIdActive := #i_udtReq.intId;
+            IF #i_udtReq.intPathLen > 0
+               OR #i_udtReq.intBlock = #BLOCK_DRUM_CCW OR #i_udtReq.intBlock = #BLOCK_DRUM_CW THEN
+               #tMoveAct := #T_MOVE_PATH;       // v0.6: up to seven moves in one program run. v0.7: the full circle of blocks 6 and 7 too
+            ELSE
+               #tMoveAct := #T_MOVE;
+            END_IF;
+            // v0.8: a long move gets more time, its way divided by the minimum speed of the configuration.
+            // the way: from the actual pose to the target, or along the path segment by segment, or the
+            // arc of a circle block when that is longer. 0 mm/s = the fixed limits of v0.7
+            IF #i_rMinSpeed > 0.0 THEN
+               #tmp_rPX := #i_udtStatus.udtPoseBcs.rX;
+               #tmp_rPY := #i_udtStatus.udtPoseBcs.rY;
+               #tmp_rPZ := #i_udtStatus.udtPoseBcs.rZ;
+               IF #i_udtReq.intPathLen > 0 THEN
+                  #tmp_rDist := 0.0;
+                  FOR #tmp_k := 1 TO #i_udtReq.intPathLen DO
+                     #tmp_rDist := #tmp_rDist + SQRT(SQR(#i_udtReq.aoudtPath[#tmp_k].rX - #tmp_rPX)
+                                                   + SQR(#i_udtReq.aoudtPath[#tmp_k].rY - #tmp_rPY)
+                                                   + SQR(#i_udtReq.aoudtPath[#tmp_k].rZ - #tmp_rPZ));
+                     #tmp_rPX := #i_udtReq.aoudtPath[#tmp_k].rX;
+                     #tmp_rPY := #i_udtReq.aoudtPath[#tmp_k].rY;
+                     #tmp_rPZ := #i_udtReq.aoudtPath[#tmp_k].rZ;
+                  END_FOR;
+               ELSE
+                  #tmp_rDist := SQRT(SQR(#i_udtReq.udtPose.rX - #tmp_rPX)
+                                   + SQR(#i_udtReq.udtPose.rY - #tmp_rPY)
+                                   + SQR(#i_udtReq.udtPose.rZ - #tmp_rPZ));
+               END_IF;
+               IF (#i_udtReq.intBlock >= #CIRC_FIRST AND #i_udtReq.intBlock <= #CIRC_LAST)
+                  OR #i_udtReq.intBlock = #BLOCK_DRUM_CCW OR #i_udtReq.intBlock = #BLOCK_DRUM_CW THEN
+                  IF ABS(#i_udtReq.aorPar[2]) > 0.0 THEN
+                     #tmp_rArc := #i_udtReq.aorPar[1] * ABS(#i_udtReq.aorPar[2]) * #DEG_TO_RAD;
+                  ELSE
+                     #tmp_rArc := #i_udtReq.aorPar[1] * 90.0 * #DEG_TO_RAD;   // a quarter when the request names no angle
+                  END_IF;
+                  IF #tmp_rArc > #tmp_rDist THEN
+                     #tmp_rDist := #tmp_rArc;
+                  END_IF;
+               END_IF;
+               #tMoveAct := #tMoveAct + DINT_TO_TIME(REAL_TO_DINT(#tmp_rDist / #i_rMinSpeed * 1000.0));
+            END_IF;
+            #intStep := 10;
+         END_IF;
+
+      10: // write everything. gates closed, start off
+         #intRunNr := #intRunNr + 1;
+         IF #intRunNr > #RUNNR_MAX THEN
+            #intRunNr := 1;
+         END_IF;
+         #o_udtState.intRunNr := #intRunNr;
+
+         #io_intPrgNr := #PRG_NR;
+         #io_aorSrlPose[1] := #i_udtReq.udtPose.rX;
+         #io_aorSrlPose[2] := #i_udtReq.udtPose.rY;
+         #io_aorSrlPose[3] := #i_udtReq.udtPose.rZ;
+         #io_aorSrlPose[4] := #i_udtReq.udtPose.rRotZ;
+         #io_aorSrlPose[5] := #i_udtReq.udtPose.rRotY;
+         #io_aorSrlPar[1] := #i_udtReq.aorPar[1];
+         #io_aorSrlPar[2] := #i_udtReq.aorPar[2];
+         #io_aorSrlPar[3] := #i_udtReq.aorPar[3];
+         #io_aorSrlPar[4] := INT_TO_REAL(#intRunNr);
+         IF #i_udtReq.intOverride > 0 THEN
+            #io_intOverride := LIMIT(MN := 1, IN := #i_udtReq.intOverride, MX := 100);   // rule 7: never 0
+         END_IF;
+         // v0.6: the path to pose[1..7]. unused segments hold the last pose, so every line of a
+         // path block has a valid target even when the path is shorter than the block
+         IF #i_udtReq.intPathLen > 0 THEN
+            FOR #tmp_k := 1 TO #PATH_MAX DO
+               IF #tmp_k <= #i_udtReq.intPathLen THEN
+                  #io_aoudtPath[#tmp_k] := #i_udtReq.aoudtPath[#tmp_k];
+               ELSE
+                  #io_aoudtPath[#tmp_k] := #i_udtReq.aoudtPath[#i_udtReq.intPathLen];
+               END_IF;
+               #io_aorPathBlend[#tmp_k] := #i_udtReq.rBlend;
+            END_FOR;
+         END_IF;
+         FOR #tmp_i := 1 TO 8 DO
+            #io_aoxSrlGate[#tmp_i] := FALSE;
+         END_FOR;
+         #io_aoxSrlGate[#intBlockAct] := TRUE;   // the gate goes out with the pose, not with the start (2026-11-03)
+         #io_xGateEnable := TRUE;
+         #io_xStart := FALSE;
+         IF #i_udtStatus.xRepositionRequired THEN
+            #o_udtState.xPrgStop := TRUE;    // v0.5: cancel the way back to the old path first
+            #intStep := 15;
+         ELSE
+            #intStep := 20;
+         END_IF;
+
+      15: // v0.5: program stop on the bus until the robot shows the program initialized and the
+          // repositioning request gone (manual 9.8, 9.10). then the stop goes off, and step 20
+          // keeps the start edge at least one settle time after its falling edge (manual 9.4)
+         IF #i_udtStatus.xPrgInitialized AND NOT #i_udtStatus.xRepositionRequired
+            AND NOT #i_udtStatus.xRepositionActive THEN
+            #o_udtState.xPrgStop := FALSE;
+            #intStep := 20;
+         ELSIF #tonStop.Q THEN
+            #o_udtState.xPrgStop := FALSE;
+            #o_udtState.intErrId := 15;
+            #intStep := 90;
+         END_IF;
+
+      20: // the pose and the gate sit on the bus for one settle time, rule 4, and the robot
+          // shows program 20 ready. a program change takes the robot a moment
+         IF #tonSettle.Q AND #tmp_xPrgReady THEN
+            #intStep := 30;
+         ELSIF #tonPrg.Q THEN
+            #o_udtState.intErrId := 14;
+            #intStep := 90;
+         END_IF;
+
+      30: // the start edge. the gate is open since step 10
+         #io_xStart := TRUE;
+         #intStep := 40;
+
+      40: // "program running" must be seen, rule 5.
+          // a very short move can be over between two cycles: then finished + this run's
+          // number already echoed in real[72] is the proof that the program ran
+         IF #i_udtStatus.xPrgRunning THEN
+            #intStep := 50;
+         ELSIF #i_udtStatus.xPrgFinished AND #i_intEchoRun = #intRunNr THEN
+            #intStep := 50;
+         ELSIF #tonRun.Q THEN
+            #o_udtState.intErrId := 11;
+            #intStep := 90;
+         END_IF;
+
+      50: // wait for finished and standstill, stable for t_still
+          // later: the sensor stop branch goes here (i_udtReq.xStopOnSensor and i_xSensorStop)
+         IF #tonStill.Q THEN
+            #intStep := 60;
+         ELSIF #tonMove.Q THEN
+            #o_udtState.intErrId := 12;
+            #intStep := 90;
+         END_IF;
+
+      60: // end. close everything, check the echo, report done
+         #io_xStart := FALSE;
+         #o_udtState.xPrgStop := FALSE;
+         FOR #tmp_i := 1 TO 8 DO
+            #io_aoxSrlGate[#tmp_i] := FALSE;
+         END_FOR;
+         #o_udtState.udtPoseAtEnd := #i_udtStatus.udtPoseBcs;
+         IF #i_intEchoBlock <> #intBlockAct THEN
+            #o_udtState.intErrId := 10;
+            #intStep := 90;
+         ELSIF #i_intEchoRun <> #intRunNr THEN
+            #o_udtState.intErrId := 13;
+            #intStep := 90;
+         ELSE
+            #o_udtState.xDone := TRUE;
+            #o_udtState.xBusy := FALSE;
+            #intStep := 0;
+         END_IF;
+
+      90: // error. close everything, stay here until reset
+         #io_xStart := FALSE;
+         #o_udtState.xPrgStop := FALSE;
+         FOR #tmp_i := 1 TO 8 DO
+            #io_aoxSrlGate[#tmp_i] := FALSE;
+         END_FOR;
+         #o_udtState.xBusy := FALSE;
+         IF NOT #o_udtState.xError THEN
+            #o_udtState.xError := TRUE;
+            #o_udtState.uiMsgIdAtError := #i_udtStatus.uiMsgId;
+            #o_udtState.udtPoseAtEnd := #i_udtStatus.udtPoseBcs;
+         END_IF;
+   END_CASE;
+
+   #o_udtState.intStep := #intStep;
+
+   // error numbers, goals.md 5.5
+   //  1 block not 1..8 or not yet in program 20     10 wrong block echoed in real[71]
+   //  2 x y z outside the limits (target or path)   11 no "program running" within t_run
+   //  3 rotz roty outside the limits (target or path) 12 no "program finished" within t_move / t_move_path (+ way / rMinSpeed, v0.8)
+   //  4 circle without radius (blocks 3, 4, 6, 7)   13 run number echo in real[72] is not this run
+   //                                                 14 robot does not show program 20 initialized or finished
+   //                                                 15 program stop not taken, repositioning request stays (v0.5)
+   //  5 not ready / referenced / automatic / access / setpoints   16 path longer than 7 poses (v0.6)
+   //  6 moving, program running or paused at start                20 aborted, enable fell
+   //  7 communication not ok                                      21 aborted, robot fault
+   //  8 override is 0, nothing would move                         22 aborted, access lost (robotmonitor took over)
+END_FUNCTION_BLOCK

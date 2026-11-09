@@ -1,0 +1,209 @@
+FUNCTION "FC_LineMove" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// 2026-11-09. one move of the line scan from its index. pure: it reads the frozen geometry
+// ("UDT_LineGeo") and the index, writes its three outputs, touches no db. fb_scanlinejob v0.2 calls
+// it when it pushes a move and when it names the line of the active move. before v0.2 the job kept
+// the same list in arrays of 203 entries; this function gives the same moves in the same order
+// (checked against the v0.1 list for every switch position, TEST/CHECKLIST_LINE_AUTO.md part D).
+//
+// the order of the moves. the kind numbers are those of fb_scanlinejob (hmi text list TL_MoveLine):
+//    [1 to start, only with intFirst = 1]   2 above line 0 at safe z   3 down onto line 0, slow   4 line 0, slow
+//    for every k = 1 .. n-1:
+//        without lift:  5 index to the beginning of line k, at the scan height            then  4 line k
+//        with lift:     6 lift at the end of line k-1   7 travel to the beginning of line k   8 down onto line k, slow   then  4 line k
+//    9 lift at the end of the last line to safe z   10 to start (pose 2)   [11 home, only with xHome]
+// intMoves = (intFirst = 1 ? 1 : 0) + 3 + (n - 1) * (2, or 4 with lift) + 2 + (xHome ? 1 : 0). the job computes it.
+//
+// geometry (udtGeo): a_k = a_0 + k * pitch * idx is the start of the patch of line k. the line k runs
+// from a_k - leadin * d to a_k + (length + leadin) * d; an odd line of the serpentine runs the same two
+// points the other way round and carries rRotZOdd. the lift (6) and the final lift (9) stand over the
+// end point of the line they leave, with its rotz. every computed point has the roty of the start.
+// "to start" and "home" are the taught poses 2 and 1 as they are.
+   VAR_INPUT
+      i_udtGeo : "UDT_LineGeo";                 // the frozen geometry of the job
+      i_intIdx : Int;                           // the move, 1 .. i_udtGeo.intMoves
+   END_VAR
+
+   VAR_OUTPUT
+      o_intKind : Int;                          // the kind of move, 1 .. 11. 0 = the index is outside the job
+      o_intK : Int;                             // the line of the move, 0 .. n-1 (0 for to start and home)
+      o_udtPose : "UDT_Pose";                   // the target of the move
+   END_VAR
+
+   VAR_TEMP
+      tmp_intIdx : Int;                         // the index without the leading "to start"
+      tmp_intPer : Int;                         // moves per line k >= 1: 2 (index + line) or 4 (lift, travel, down + line)
+      tmp_intJ : Int;                           // the index counted from the first move after line 0
+      tmp_intKK : Int;                          // the line that the block of moves leads to
+      tmp_intR : Int;                           // the position inside the block, 0 .. per-1
+      tmp_intS : Int;                           // the position inside the tail: 1 lift, 2 to start, 3 home
+      tmp_intZ : Int;                           // 1 scan height, 2 safe z, 3 lift z
+      tmp_xTaught : Bool;                       // the pose is a taught one (start, home), not computed
+      tmp_xEnd : Bool;                          // the end point of the line (true) or its beginning (false)
+      tmp_xRev : Bool;                          // the line runs backwards
+      tmp_rAX : Real;                           // a_k
+      tmp_rAY : Real;
+      tmp_rAlong : Real;                        // where on the line, from a_k along d
+   END_VAR
+
+   VAR CONSTANT
+      ID_START : Int := 1;
+      ID_ABOVE : Int := 2;
+      ID_DOWN0 : Int := 3;
+      ID_LINE : Int := 4;
+      ID_INDEX : Int := 5;
+      ID_LIFT : Int := 6;
+      ID_TRAVEL : Int := 7;
+      ID_DOWN : Int := 8;
+      ID_LIFT_END : Int := 9;
+      ID_START2 : Int := 10;
+      ID_HOME : Int := 11;
+      Z_SCAN : Int := 1;
+      Z_SAFE : Int := 2;
+      Z_LIFT : Int := 3;
+   END_VAR
+
+BEGIN
+   #o_intKind := 0;
+   #o_intK := 0;
+   #o_udtPose.rX := 0.0;
+   #o_udtPose.rY := 0.0;
+   #o_udtPose.rZ := 0.0;
+   #o_udtPose.rRotZ := 0.0;
+   #o_udtPose.rRotY := 0.0;
+   #tmp_xTaught := FALSE;
+   #tmp_xEnd := FALSE;
+   #tmp_intZ := #Z_SCAN;
+
+   IF #i_intIdx < 1 OR #i_intIdx > #i_udtGeo.intMoves OR #i_udtGeo.intCount < 1 THEN
+      RETURN;                                   // outside the job: kind 0, everything else 0
+   END_IF;
+
+   // ---- which move: kind, line, start or end of the line, height -------------------------------
+   #tmp_intIdx := #i_intIdx;
+   IF #i_udtGeo.intFirst = 1 THEN
+      IF #tmp_intIdx = 1 THEN
+         #o_intKind := #ID_START;               // 1: to start, pose 2
+         #o_intK := 0;
+         #tmp_xTaught := TRUE;
+         #o_udtPose := #i_udtGeo.udtPStart;
+      END_IF;
+      #tmp_intIdx := #tmp_intIdx - 1;           // from here the list is counted without "to start"
+   END_IF;
+
+   IF #i_udtGeo.xLift THEN
+      #tmp_intPer := 4;
+   ELSE
+      #tmp_intPer := 2;
+   END_IF;
+
+   IF #o_intKind = 0 THEN
+      IF #tmp_intIdx = 1 THEN
+         #o_intKind := #ID_ABOVE;               // 2: above the beginning of line 0, at safe z, already with the rotz of line 0
+         #o_intK := 0;
+         #tmp_xEnd := FALSE;
+         #tmp_intZ := #Z_SAFE;
+      ELSIF #tmp_intIdx = 2 THEN
+         #o_intKind := #ID_DOWN0;               // 3: down onto the beginning of line 0, slow
+         #o_intK := 0;
+         #tmp_xEnd := FALSE;
+         #tmp_intZ := #Z_SCAN;
+      ELSIF #tmp_intIdx = 3 THEN
+         #o_intKind := #ID_LINE;                // 4: line 0 to its end, slow
+         #o_intK := 0;
+         #tmp_xEnd := TRUE;
+         #tmp_intZ := #Z_SCAN;
+      ELSE
+         #tmp_intJ := #tmp_intIdx - 3;                               // 1 .. for the moves after line 0
+         #tmp_intKK := (#tmp_intJ - 1) / #tmp_intPer + 1;            // integer division: the line this block leads to
+         #tmp_intR := (#tmp_intJ - 1) MOD #tmp_intPer;               // 0 .. per-1
+         IF #tmp_intKK <= #i_udtGeo.intCount - 1 THEN
+            IF #i_udtGeo.xLift THEN
+               CASE #tmp_intR OF
+                  0:
+                     #o_intKind := #ID_LIFT;      // 6: lift at the end of line kk-1, to lift z, orientation of that line
+                     #o_intK := #tmp_intKK - 1;
+                     #tmp_xEnd := TRUE;
+                     #tmp_intZ := #Z_LIFT;
+                  1:
+                     #o_intKind := #ID_TRAVEL;    // 7: travel at lift z to the beginning of line kk, the turn rides on it
+                     #o_intK := #tmp_intKK;
+                     #tmp_xEnd := FALSE;
+                     #tmp_intZ := #Z_LIFT;
+                  2:
+                     #o_intKind := #ID_DOWN;      // 8: down onto the beginning of line kk, slow
+                     #o_intK := #tmp_intKK;
+                     #tmp_xEnd := FALSE;
+                     #tmp_intZ := #Z_SCAN;
+                  ELSE
+                     #o_intKind := #ID_LINE;      // 4: line kk to its end, slow
+                     #o_intK := #tmp_intKK;
+                     #tmp_xEnd := TRUE;
+                     #tmp_intZ := #Z_SCAN;
+               END_CASE;
+            ELSE
+               IF #tmp_intR = 0 THEN
+                  #o_intKind := #ID_INDEX;        // 5: index at the scan height to the beginning of line kk, the turn rides on it
+                  #o_intK := #tmp_intKK;
+                  #tmp_xEnd := FALSE;
+                  #tmp_intZ := #Z_SCAN;
+               ELSE
+                  #o_intKind := #ID_LINE;         // 4: line kk to its end, slow
+                  #o_intK := #tmp_intKK;
+                  #tmp_xEnd := TRUE;
+                  #tmp_intZ := #Z_SCAN;
+               END_IF;
+            END_IF;
+         ELSE
+            // the tail after the last line
+            #tmp_intS := #tmp_intJ - (#i_udtGeo.intCount - 1) * #tmp_intPer;   // 1, 2, 3
+            IF #tmp_intS = 1 THEN
+               #o_intKind := #ID_LIFT_END;        // 9: lift at the end of the last line to safe z, orientation unchanged
+               #o_intK := #i_udtGeo.intCount - 1;
+               #tmp_xEnd := TRUE;
+               #tmp_intZ := #Z_SAFE;
+            ELSIF #tmp_intS = 2 THEN
+               #o_intKind := #ID_START2;          // 10: to start, pose 2
+               #o_intK := 0;
+               #tmp_xTaught := TRUE;
+               #o_udtPose := #i_udtGeo.udtPStart;
+            ELSE
+               #o_intKind := #ID_HOME;            // 11: home, pose 1
+               #o_intK := 0;
+               #tmp_xTaught := TRUE;
+               #o_udtPose := #i_udtGeo.udtPHome;
+            END_IF;
+         END_IF;
+      END_IF;
+   END_IF;
+
+   // ---- the computed point: a_k, then the beginning or the end of line k, at the height ----------
+   IF NOT #tmp_xTaught THEN
+      #tmp_rAX := #i_udtGeo.rA0X + INT_TO_REAL(#o_intK) * #i_udtGeo.rPitch * #i_udtGeo.rIdxX;
+      #tmp_rAY := #i_udtGeo.rA0Y + INT_TO_REAL(#o_intK) * #i_udtGeo.rPitch * #i_udtGeo.rIdxY;
+      #tmp_xRev := #i_udtGeo.xZigzag AND ((#o_intK MOD 2) = 1);
+      // the far point a_k + (length + leadin) * d is the end of a normal line and the beginning of a reversed one
+      IF #tmp_xEnd XOR #tmp_xRev THEN
+         #tmp_rAlong := #i_udtGeo.rLength + #i_udtGeo.rLeadIn;
+      ELSE
+         #tmp_rAlong := -#i_udtGeo.rLeadIn;
+      END_IF;
+      #o_udtPose.rX := #tmp_rAX + #tmp_rAlong * #i_udtGeo.rDirX;
+      #o_udtPose.rY := #tmp_rAY + #tmp_rAlong * #i_udtGeo.rDirY;
+      CASE #tmp_intZ OF
+         2:
+            #o_udtPose.rZ := #i_udtGeo.rSafeZ;
+         3:
+            #o_udtPose.rZ := #i_udtGeo.rLiftZ;
+         ELSE
+            #o_udtPose.rZ := #i_udtGeo.rZ;
+      END_CASE;
+      IF #tmp_xRev THEN
+         #o_udtPose.rRotZ := #i_udtGeo.rRotZOdd;
+      ELSE
+         #o_udtPose.rRotZ := #i_udtGeo.rRotZEven;
+      END_IF;
+      #o_udtPose.rRotY := #i_udtGeo.rRotY;
+   END_IF;
+END_FUNCTION

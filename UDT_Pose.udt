@@ -1,0 +1,13 @@
+TYPE "UDT_Pose"
+VERSION : 0.1
+// one pose of the gantry tcp in base coordinates
+// units: mm and degrees. on the bus they become whole numbers (0 decimal places)
+   STRUCT
+      rX : Real;      // mm
+      rY : Real;      // mm
+      rZ : Real;      // mm
+      rRotZ : Real;   // deg, joint 4 (r1)
+      rRotY : Real;   // deg, joint 5 (r2)
+   END_STRUCT;
+
+END_TYPE

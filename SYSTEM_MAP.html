@@ -1,0 +1,236 @@
+<title>Gantry Robot System Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* layout: one column of sections, each a grid of cards that stacks on a phone. tags in mono under every element. */
+:root{
+  --bg:#f6f5f1; --bg2:#ffffff; --fg:#1d1d1b; --fg2:#5a5955; --line:#d9d7cf; --line2:#b9b7ae;
+  --ok-bg:#e3f1e6; --ok-fg:#1e5b31; --plc-bg:#fbefd6; --plc-fg:#7a4f08; --new-bg:#e2ecf8; --new-fg:#1a4a85;
+  --tag:#3b4a5e; --accent:#b4471f;
+  --font:"Barlow",system-ui,"Segoe UI",Arial,sans-serif; --mono:"IBM Plex Mono",Consolas,"Courier New",monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#17181a; --bg2:#202225; --fg:#ebe9e2; --fg2:#a7a59c; --line:#34373c; --line2:#4a4e55;
+  --ok-bg:#1d3a26; --ok-fg:#9fd6ae; --plc-bg:#3f2f12; --plc-fg:#f0c46a; --new-bg:#1b2f4c; --new-fg:#9cc2f0;
+  --tag:#aebbd0; --accent:#e58a5e; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#17181a; --bg2:#202225; --fg:#ebe9e2; --fg2:#a7a59c; --line:#34373c; --line2:#4a4e55;
+  --ok-bg:#1d3a26; --ok-fg:#9fd6ae; --plc-bg:#3f2f12; --plc-fg:#f0c46a; --new-bg:#1b2f4c; --new-fg:#9cc2f0;
+  --tag:#aebbd0; --accent:#e58a5e; color-scheme:dark }
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 48px}
+.wrap{max-width:1100px;margin:0 auto}
+h1{font-size:28px;font-weight:600;margin:0 0 4px;text-wrap:balance}
+h2{font-size:20px;font-weight:600;margin:40px 0 12px;padding-top:12px;border-top:1px solid var(--line);text-wrap:balance}
+h3{font-size:16px;font-weight:600;margin:0 0 6px}
+p{margin:0 0 10px;max-width:72ch}
+.sub{color:var(--fg2);margin-bottom:16px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin:12px 0 0;font-size:14px}
+.pill{display:inline-block;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:4px;vertical-align:middle}
+.ok{background:var(--ok-bg);color:var(--ok-fg)} .plc{background:var(--plc-bg);color:var(--plc-fg)} .new{background:var(--new-bg);color:var(--new-fg)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.card .nw{font-size:12px;color:var(--fg2);text-transform:uppercase;letter-spacing:.05em}
+.card .t{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
+code,.tag{font-family:var(--mono);font-size:12.5px;color:var(--tag)}
+.tag{display:block;margin-top:2px;word-break:break-word}
+ul{margin:4px 0 8px;padding-left:18px} li{margin:2px 0}
+ol.flow{margin:0;padding:0;list-style:none;counter-reset:s}
+ol.flow li{position:relative;padding:8px 0 8px 40px;border-top:1px solid var(--line);counter-increment:s}
+ol.flow li::before{content:counter(s);position:absolute;left:0;top:8px;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center}
+ol.flow li b{font-weight:600}
+.tw{overflow-x:auto;margin:6px 0 12px}
+table{border-collapse:collapse;font-size:14px;min-width:100%}
+th,td{text-align:left;vertical-align:top;padding:5px 8px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--fg2);font-size:13px}
+td code{white-space:nowrap}
+.num{font-variant-numeric:tabular-nums}
+.note{border-left:3px solid var(--accent);padding:6px 12px;margin:10px 0;background:var(--bg2);border-radius:0}
+@media (prefers-reduced-motion:no-preference){ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px} }
+</style>
+
+<div class="wrap">
+<h1>Gantry robot, PLC master control</h1>
+<p class="sub">S7-1511F and SEW MOVIKIT Robotics on MOVIRUN smart. Five axes X Y Z RotZ RotY. State of 2026-10-31, as it is in the files of the Gantry_Robot folder.</p>
+<div class="legend">
+  <span><span class="pill ok">proven</span> ran on the machine: single move, bus, status map</span>
+  <span><span class="pill plc">in the plc</span> imported and wired, automatic not yet run: teach, queue, cube job, alarms</span>
+  <span><span class="pill new">new</span> written 2026-10-31, not yet in TIA: drum job, job mux, program 20 lines 11–20</span>
+</div>
+
+<h2>1. The two organization blocks</h2>
+<p>OB30 delivers, OB1 decides. OB30 only moves words to and from the bus every 10 ms. OB1 runs the logic once per cycle, in the order below, which is the data flow of one cycle. Your cyclic interrupt may be named OB33, the content is the same.</p>
+<div class="two">
+<div>
+<h3>OB30, every 10 ms, the bus</h3>
+<div class="grid" style="grid-template-columns:1fr">
+  <div class="card"><div class="t"><span class="nw">network 1</span><span class="pill ok">proven</span></div><b>Handshake</b><span class="tag">writes "DB_App".HS, HS_Alive, HS_Stall, HS_Count</span>Toggles HS when the robot echoes it. HS_Alive falls after 200 stalled cycles.</div>
+  <div class="card"><div class="t"><span class="nw">network 2</span><span class="pill ok">proven</span></div><b>Module 1 FB, slot 18, HW 278, words 1–64</b><span class="tag">"DB_MOVIKIT_Robotics-5AX"  enable := "DB_App".Cmd.Enable  start := Cmd.Start AND ReadyToStart  prog_no := Cmd.ProgramNumber  override := Cmd.Override</span>Control words, jog, homing, the seven path segments (not used by the single move).</div>
+  <div class="card"><div class="t"><span class="nw">network 3</span><span class="pill ok">proven</span></div><b>Module 2 FB v0.7, slot 19, HW 272, words 65–128</b><span class="tag">"DB_MOVIKIT_ROBOTICS_Module2"  enable := TRUE  PoseFirstWord 50 → words 114–118 = POSE[51]  ParamFirstWord 55 → 119–122 = REAL[51..54]  BoolWriteWord 59 → 123 = BOOL[51..58]  SrlFirstWord 1 → PI 65–80 = REAL[71..86]  BoolWord 17 → PI 81 = BOOL[71..74]</span>Pose from "DB_App".Srl.Pose[1..5], gates from Srl.Gate[1..8] with Srl.GateEnable, parameters from Srl.Par[1..4]. Communication_OK to Srl.CommOK.</div>
+  <div class="card"><div class="t"><span class="nw">network 4</span><span class="pill ok">proven</span></div><b>FC_RobotStatusMap</b><span class="tag">i_aowPI := "DB_MOVIKIT_Robotics-5AX".PI  →  "DB_Robot".Status</span>The only writer of DB_Robot.Status: ready, STO, power, moving, referenced, setpoint active, fault, warning, access, program state, message id, program nr, speed, pose BCS, joints, comm flags.</div>
+</div>
+</div>
+<div>
+<h3>OB1, main cycle, the decisions</h3>
+<div class="grid" style="grid-template-columns:1fr">
+  <div class="card"><div class="t"><span class="nw">network 5 and 7, yours</span><span class="pill ok">proven</span></div><b>Slot 17 MOVIRUN device handshake, FB_MachineReady</b><span class="tag">%IW/QW275..278</span>Unchanged. The Enable output of FB_MachineReady is no longer wired, network 8 does that.</div>
+  <div class="card"><div class="t"><span class="nw">network 8</span><span class="pill ok">proven</span></div><b>Enable logic</b><span class="tag">writes "DB_App".Cmd.Enable, one writer. requester branches: machine ready … OR "DB_RobotMove".Man.xEnable</span></div>
+  <div class="card"><div class="t"><span class="nw">robot teach</span><span class="pill plc">in the plc</span></div><b>IDB_Teach (FB_Teach)</b><span class="tag">i_xTeach := "DB_RobotJob".Teach.xTeach  i_xClearPose := Teach.xClear  i_intPoseNr := Teach.intPoseNr  i_xAllowed := Man.xEnable AND NOT Man.xAuto AND NOT State.xBusy  i_xActualValid := Status.xReferenced AND Status.xCommOK  i_udtActual := "DB_Robot".Status.udtPoseBcs  io_aoudtP := "DB_Poses".aoudtP  io_aoxValid := "DB_Poses".aoxValid  o_xTaught, o_xRefused, o_intLastTaught → Teach.*</span></div>
+  <div class="card"><div class="t"><span class="nw">robot job, scan cube</span><span class="pill plc">in the plc</span></div><b>IDB_ScanCubeJob (FB_ScanCubeJob)</b><span class="tag">i_xStart := Man.xStart AND (Man.intJob = 1)  i_xAbort := Man.xAbort  i_xAuto := Man.xAuto AND "DB_RobotMove".Man.xEnable  i_intOverride := Man.intOverride  i_aoudtP, i_aoxValid, i_rSafeZ := "DB_Poses".*  i_udtMoveState := "DB_RobotMove".State  i_intQueueCount := "DB_MoveQueue".intCount  outputs → "DB_RobotJob".Cube.*</span><span class="pill new">new</span> the start gate and the outputs to Cube changed on 2026-10-31.</div>
+  <div class="card"><div class="t"><span class="nw">robot job, scan drum</span><span class="pill new">new</span></div><b>IDB_ScanDrumJob (FB_ScanDrumJob)</b><span class="tag">i_xStart := Man.xStart AND (Man.intJob = 2)  same pins as the cube job, plus i_rZ, i_rRadius, i_rStartAngle, i_rRotZOffset, i_xClockwise := "DB_Recipe".Drum.*  o_udtOut → "DB_RobotJob".Drum</span></div>
+  <div class="card"><div class="t"><span class="nw">job mux</span><span class="pill new">new</span></div><b>FC_JobMux</b><span class="tag">i_intJob := Man.intJob  i_udtCube := "DB_RobotJob".Cube  i_udtDrum := "DB_RobotJob".Drum  io_intJobActive := "DB_RobotJob".intJobActive  → "DB_RobotJob".Push.xReq, .udtMove, .xClear, "DB_RobotJob".State</span>The one writer of Push and State. Switches the active job only while no job runs.</div>
+  <div class="card"><div class="t"><span class="nw">move queue</span><span class="pill plc">in the plc</span></div><b>IDB_MoveQueue (FB_MoveQueue)</b><span class="tag">i_xPush := Push.xReq  i_udtPush := Push.udtMove  i_xPop := "DB_RobotMove".State.xDone  i_xClear := Push.xClear  io_udtQ := "DB_MoveQueue".Q  → Head, xHeadValid, intCount, xFull, xPushRefused</span>FIFO of 50 moves. Push on a full queue is refused, never overwritten.</div>
+  <div class="card"><div class="t"><span class="nw">robot move</span><span class="pill ok">proven</span></div><b>FC_MoveSelect v0.2 + IDB_RobotMove (FB_RobotMove v0.3 in the PLC, v0.6 in the folder: gate with the pose, program stop, path mode)</b><span class="tag">i_xHand := Man.xEnable AND NOT "DB_RobotJob".Man.xAuto  i_xAuto := Man.xEnable AND "DB_RobotJob".Man.xAuto  i_udtMan := Man.udtReq  i_xManStart := Man.xStart  i_udtQueueHead := "DB_MoveQueue".Head  i_xQueueHeadValid := xHeadValid  i_udtMoveState := State  → "DB_RobotMove".Req, xReqStart</span><span class="tag">engine: i_udtReq := Req  i_xStart := xReqStart  i_xEnable := Man.xEnable  i_xReset := Man.xReset  i_intBlocksInPrg20 := Cfg.intBlocksInPrg20  i_udtStatus := "DB_Robot".Status  i_intEchoBlock := "DB_MOVIKIT_ROBOTICS_Module2".SrlRealRaw[1]  i_intEchoRun := SrlRealRaw[2]  io → "DB_App".Srl.Pose, Par, Gate, GateEnable, Cmd.Start, Cmd.ProgramNumber, Cmd.Override  o_udtState → "DB_RobotMove".State</span>The single move is proven. The auto path of FC_MoveSelect (seven inputs) is in the PLC, not yet run.</div>
+  <div class="card"><div class="t"><span class="nw">robot alarms</span><span class="pill plc">in the plc</span></div><b>FC_RobotAlarms</b><span class="tag">i_udtMoveState, i_udtJobState, i_udtStatus  → "DB_RobotJob".aoxAlarm[1..32]</span>Bits 1–22 engine errors, 9 drum radius, 23–27 job errors 1 2 3 4 10, 28–32 robot fault, comm lost, access taken, outside workspace, warning.</div>
+</div>
+</div>
+</div>
+
+<h2>2. Single move <span class="pill ok">proven</span></h2>
+<p>Robot move screen. Enable on, AUTO off. This is the path every other function uses at the end, one move at a time.</p>
+<ol class="flow">
+  <li><b>You type</b> X Y Z RotZ RotY, block 1 or 2, override 10 <span class="tag">"DB_RobotMove".Man.udtReq.udtPose.rX … rRotY, .intBlock, .intOverride   radius for block 3/4: .aorPar[1]</span></li>
+  <li><b>MOVE</b>, momentary <span class="tag">"DB_RobotMove".Man.xStart</span></li>
+  <li><b>FC_MoveSelect</b> in hand mode copies the typed request and the start <span class="tag">Req := Man.udtReq   xReqStart := Man.xStart</span></li>
+  <li><b>FB_RobotMove step 5, checks</b>: block 1 … Cfg.intBlocksInPrg20 else error 1; pose inside the limits else 2 or 3; radius &gt; 0 for blocks 3 and 4 else 4; robot ready and referenced and access else 5; not moving and program not running else 6; comm OK else 7; override &gt; 0 else 8; program 20 initialized or finished else 14</li>
+  <li><b>Step 10, write</b>: Srl.Pose[1..5] from the pose, Srl.Par[1..3] from aorPar, Srl.Par[4] = run number, Srl.Gate[n] = TRUE with GateEnable, Cmd.Override from the request, Cmd.ProgramNumber = 20 <span class="tag">"DB_App".Srl.*, "DB_App".Cmd.Override, .ProgramNumber</span></li>
+  <li><b>Step 15, program stop</b> (engine v0.5, 2026-11-03): only when the robot shows "repositioning required" after a jog. State.xPrgStop goes to the stop pin of network 2 until the robot shows initialized without the request, then off. Without it the robot would first drive back to the point where it left the old path (manual 6.6, 9.10). 2 s without the answer → error 15 <span class="tag">"DB_RobotMove".State.xPrgStop   OB30 NW2: stop := Cmd.Stop OR State.xPrgStop</span></li>
+  <li><b>OB30</b> sends the words on the next 10 ms tick: pose to 114–118, parameters to 119–122, gates to 123. Then the engine sets <code>"DB_App".Cmd.Start</code>, network 2 puts it on the bus together with ReadyToStart</li>
+  <li><b>Robot</b> runs program 20: the IF of block n is true, SET_MOTIONSET, LIN_VAR POSE[51] (or CIRC_VAR), REAL[71] := n, then REAL[72] := REAL[54], END_PROG waits for the movement</li>
+  <li><b>Step 20 and 40</b>: the engine must see program running (else error 11 after 3 s), then program finished (move timeout → 12). The step 40 echo check covers very short moves. "Program finished" is the normal state of program 20 between two moves, the next start works from it, nothing clears it</li>
+  <li><b>Step 60, echo</b>: REAL[71] must equal the block (else 10), REAL[72] must equal the run number (else 13). Then xDone for one cycle, udtPoseAtEnd = actual pose, start bit and gate off <span class="tag">"DB_RobotMove".State.xDone, .udtPoseAtEnd, .intRunNr, .intBlockActive</span></li>
+  <li><b>While it runs</b>: Enable falls → 20, robot fault → 21, access lost → 22. RESET clears the error <span class="tag">"DB_RobotMove".Man.xReset</span></li>
+</ol>
+
+<h2>3. Teaching <span class="pill plc">in the plc</span></h2>
+<p>Automatic screen. Enable on, AUTO off, robot referenced, RobotMonitor not holding the access.</p>
+<ol class="flow">
+  <li><b>Jog</b> the robot to the place with the old robot screen</li>
+  <li><b>Pose nr</b> = n, 1 … 50 <span class="tag">"DB_RobotJob".Teach.intPoseNr</span></li>
+  <li><b>TEACH</b>, momentary <span class="tag">"DB_RobotJob".Teach.xTeach</span></li>
+  <li><b>FB_Teach</b> on the edge: allowed when Enable AND NOT AUTO AND NOT busy, actual valid when referenced AND comm OK, n in 1 … 50. Then <code>aoudtP[n] := Status.udtPoseBcs</code>, <code>aoxValid[n] := TRUE</code>, taught pulse, last taught = n. Else refused pulse <span class="tag">"DB_Poses".aoudtP[n], aoxValid[n]   "DB_RobotJob".Teach.xTaught, xRefused, intLastTaught</span></li>
+  <li><b>CLEAR</b> marks row n not valid, numbers stay <span class="tag">"DB_RobotJob".Teach.xClear</span></li>
+  <li><b>Retain</b>: DB_Poses survives power off. Safe Z is typed <span class="tag">"DB_Poses".rSafeZ</span></li>
+</ol>
+<div class="tw"><table>
+<tr><th class="num">Pose</th><th>Name</th><th>Used by</th><th>How to teach it</th></tr>
+<tr><td class="num">1</td><td>home</td><td>cube, drum (optional last move)</td><td>park position</td></tr>
+<tr><td class="num">2</td><td>start</td><td>cube, drum</td><td>above the part, free height</td></tr>
+<tr><td class="num">3</td><td>approach</td><td>cube</td><td>near corner 1, still above the cube</td></tr>
+<tr><td class="num">4 … 7</td><td>corner 1 … 4</td><td>cube</td><td>tool at the corner, turned toward the side that starts there. Each corner has its own RotZ</td></tr>
+<tr><td class="num">8</td><td>drum center</td><td>drum</td><td>tool above the drum axis, any height. Only X, Y, RotY are used</td></tr>
+<tr><td class="num">9 … 50</td><td>free</td><td>stage 3 actions 301 … 350</td><td></td></tr>
+</table></div>
+
+<h2>4. Scan cube <span class="pill plc">in the plc</span></h2>
+<p>Automatic screen. Enable on, AUTO on, job = 1, override 10. Poses 2 … 7 taught, safe Z set. First in simulation (old screen, PO 1.9), then real.</p>
+<ol class="flow">
+  <li><b>START</b>, momentary <span class="tag">"DB_RobotJob".Man.xStart, gated in OB1 by Man.intJob = 1</span></li>
+  <li><b>FB_ScanCubeJob step 10, build and check</b>: poses 2 … 7 valid else job error 1; safe Z &gt; 0 else 2; engine idle and no error else 3; every pose of the list through FC_PoseCheck else 4 with the move number in active. Nothing is pushed if a check fails</li>
+  <li><b>The list</b>, 13 moves, 14 with home: start, approach, corner 1, side 1, turn at c2, side 2, turn at c3, side 3, turn at c4, side 4, turn at c1, lift to safe Z, start, home. A side is the next corner with the orientation of the corner before, a turn takes the own orientation. All block 1, blend 0, override from the screen, intId = list index</li>
+  <li><b>Step 20</b>: clear the queue, push one move per cycle <span class="tag">"DB_RobotJob".Cube.xClear, .xPushReq, .udtPush → FC_JobMux → Push → FB_MoveQueue</span></li>
+  <li><b>FC_MoveSelect in auto</b>: Req := queue head, start when head valid AND NOT busy AND NOT done AND NOT error. The engine runs it exactly like a single move. xDone pops the head, the next one starts</li>
+  <li><b>Step 30, count</b>: active = intIdActive, done counts the xDone pulses. Queue 0 and engine idle → done pulse, running off <span class="tag">"DB_RobotJob".State.xRunning, xDone, intMovesDone, intMovesTotal, intMoveActive   "DB_MoveQueue".intCount</span></li>
+  <li><b>ABORT</b> or AUTO off while running: queue cleared, the running move finishes, job idle. Engine error while running: queue cleared, job error 10 with the engine number <span class="tag">"DB_RobotJob".Man.xAbort   State.intErrId, intEngineErr</span></li>
+</ol>
+
+<h2>5. Circle and drum <span class="pill new">new</span></h2>
+<p>Program 20 blocks 3 and 4 are the circle: from where the robot stands, an arc of the given radius to the end point POSE[51], in the plane XY, counter-clockwise (3) or clockwise (4). Only X and Y of the end point are used, so the end Z must be the current Z. Positive radius is the shorter arc. Never a half circle with the end-point form. A full circle: four quarters with blocks 3 and 4, or one line with block 6 or 7, the center in POSE[51] and the angle 360 in REAL[52] (2026-11-06, drum checklist part F).</p>
+<div class="note">Before anything with a circle: the add-on Circle license and the activation in the MOVISUITE software module (CIRC_VAR must appear in the New Block list), program 20 lines 11–20, <code>"DB_RobotMove".Cfg.intBlocksInPrg20</code> = 4, and a radius field on the Robot move screen bound to <code>"DB_RobotMove".Man.udtReq.aorPar[1]</code>.</div>
+<h3>By hand, the first test</h3>
+<ol class="flow">
+  <li><b>Read</b> the actual pose X0 Y0 Z0 RotZ0 RotY0</li>
+  <li><b>Type</b> X = X0 + r, Y = Y0 + r, Z = Z0, RotZ = RotZ0, RotY = RotY0, radius = r (300 for the first try), block 3, override 10, MOVE: a quarter circle counter-clockwise</li>
+  <li><b>Type</b> X0, Y0, same radius, block 4, MOVE: a quarter circle clockwise, back to the start</li>
+</ol>
+<h3>Scan drum, the job</h3>
+<p>Automatic screen, job = 2. The drum stands on the floor, axis vertical. The scan is a circle around the drum at one height, the tool looking at the axis.</p>
+<div class="tw"><table>
+<tr><th>Setting</th><th>Tag</th><th>Meaning</th></tr>
+<tr><td>center</td><td><code>"DB_Poses".aoudtP[8]</code></td><td>taught above the drum axis, any height. X, Y and RotY are used</td></tr>
+<tr><td>scan height</td><td><code>"DB_Recipe".Drum.rZ</code></td><td>mm, Z of the four points</td></tr>
+<tr><td>radius</td><td><code>"DB_Recipe".Drum.rRadius</code></td><td>mm, drum radius plus sensor distance. 0 = job error 5</td></tr>
+<tr><td>start point</td><td>computed</td><td>where the tool, looking at the axis, stands at RotZ −180 (ccw) or +180 (cw). The tool turns 90° per quarter without a wrap. The start angle field is not used (2026-11-02)</td></tr>
+<tr><td>RotZ offset</td><td><code>"DB_Recipe".Drum.rRotZOffset</code></td><td>deg, the tool RotZ when it looks along +X. Found once: stand on the +X side, turn RotZ until the sensor looks at the axis, offset = RotZ − 180</td></tr>
+<tr><td>clockwise</td><td><code>"DB_Recipe".Drum.xClockwise</code></td><td>off = block 3, angles up. on = block 4, angles down</td></tr>
+<tr><td>job</td><td><code>"DB_RobotJob".Man.intJob</code>, <code>.intJobActive</code></td><td>1 cube, 2 drum. Taken over when no job runs</td></tr>
+</table></div>
+<ol class="flow">
+  <li><b>START</b> with job = 2 <span class="tag">gated in OB1 by Man.intJob = 2</span></li>
+  <li><b>FB_ScanDrumJob step 10</b>: poses 2 and 8 valid else 1; safe Z else 2; engine idle else 3; radius &gt; 0 else 5. Points P<sub>k</sub> = center + r·(cos a<sub>k</sub>, sin a<sub>k</sub>), a<sub>k</sub> = start ± k·90°, RotZ<sub>k</sub> = a<sub>k</sub> + 180 + offset wrapped to ±180, Z = scan height, RotY from pose 8. Every point through FC_PoseCheck else 4</li>
+  <li><b>The list</b>, 9 moves, 10 with home: to start (1), above P0 at safe Z (1), down to P0 (2), arc to P1, P2, P3, P0 (3 or 4, radius in aorPar[1]), lift to safe Z (1), to start (1), home (1)</li>
+  <li><b>Then</b> exactly as the cube: push, mux, queue, select, engine, count, done. ABORT and errors the same, job error 5 is new, alarm bit 9</li>
+</ol>
+
+<h2>6. Program 20, the 22 lines</h2>
+<p>Built block by block in RobotMonitor. Every block sets its own motion set. The two echo lines of each block and line 21 are not optional. Line 22 must wait for the movement to end.</p>
+<div class="tw"><table>
+<tr><th class="num">Line</th><th>New Block</th><th>Fields</th></tr>
+<tr><td class="num">1</td><td>IF</td><td>var BOOL 51</td></tr>
+<tr><td class="num">2</td><td>SET_MOTIONSET</td><td>VAL, normal set</td></tr>
+<tr><td class="num">3</td><td>LIN_VAR</td><td>POSE 51, blending Keep</td></tr>
+<tr><td class="num">4</td><td>CALC_REALVAR</td><td>REAL 71 := val 1</td></tr>
+<tr><td class="num">5</td><td>END_IF</td><td></td></tr>
+<tr><td class="num">6 … 10</td><td>same as 1 … 5</td><td>BOOL 52, slow set, REAL 71 := 2</td></tr>
+<tr><td class="num">11</td><td>IF</td><td>var BOOL 53</td></tr>
+<tr><td class="num">12</td><td>SET_MOTIONSET</td><td>VAL, slow set</td></tr>
+<tr><td class="num">13</td><td>CIRC_VAR</td><td>RadiusEndpos, CCW, plane XY, Radius var REAL 51, Endpos var POSE 51, blending Keep</td></tr>
+<tr><td class="num">14</td><td>CALC_REALVAR</td><td>REAL 71 := val 3</td></tr>
+<tr><td class="num">15</td><td>END_IF</td><td></td></tr>
+<tr><td class="num">16 … 20</td><td>same as 11 … 15</td><td>BOOL 54, CW, REAL 71 := 4</td></tr>
+<tr><td class="num">21</td><td>CALC_REALVAR</td><td>REAL 72 := var REAL 54</td></tr>
+<tr><td class="num">22</td><td>END_PROG</td><td>wait for the movement to end = ON</td></tr>
+</table></div>
+
+<h2>7. Every setting</h2>
+<div class="tw"><table>
+<tr><th>Setting</th><th>Tag or place</th><th>Value</th></tr>
+<tr><td>blocks in program 20</td><td><code>"DB_RobotMove".Cfg.intBlocksInPrg20</code></td><td>1 with block 1 only, 2 with blocks 1–2, 4 with the circle blocks. Retain</td></tr>
+<tr><td>job override</td><td><code>"DB_RobotJob".Man.intOverride</code></td><td>10 to start, 1 … 100</td></tr>
+<tr><td>single move override</td><td><code>"DB_RobotMove".Man.udtReq.intOverride</code></td><td>1 … 100. The engine limits it to 1 … 100, never 0</td></tr>
+<tr><td>safe Z</td><td><code>"DB_Poses".rSafeZ</code></td><td>the Z of the start pose is a good value</td></tr>
+<tr><td>limits</td><td><code>FC_PoseCheck</code> constants</td><td>X 0 … 4380, Y 0 … 4230, Z −10 … 1908, RotZ ±180, RotY ±10. Changed only in the block and in GOALS.md</td></tr>
+<tr><td>motion sets</td><td>MOVISUITE, sets of motion parameters</td><td>normal and slow, numbers in PROGRAM20.md section 0</td></tr>
+<tr><td>timeouts</td><td><code>FB_RobotMove</code> constants</td><td>running must come within 3 s, then the move timeout</td></tr>
+<tr><td>bus, module 2</td><td>OB30 network 3</td><td>PoseFirstWord 50, ParamFirstWord 55, BoolWriteWord 59, SrlFirstWord 1, BoolWord 17, SrlDivisor 1.0, 0 decimals</td></tr>
+<tr><td>enable of module 2</td><td>OB30 network 3</td><td>TRUE, always</td></tr>
+<tr><td>modes</td><td><code>"DB_RobotMove".Man.xEnable</code>, <code>"DB_RobotJob".Man.xAuto</code></td><td>Enable on always. AUTO off = hand (jog, teach, MOVE), on = automatic (START, ABORT)</td></tr>
+</table></div>
+
+<h2>8. Error numbers</h2>
+<div class="two">
+<div><h3>Engine, <code>"DB_RobotMove".State.intErrId</code></h3>
+<div class="tw"><table>
+<tr><td class="num">1</td><td>block not in 1 … Cfg</td></tr>
+<tr><td class="num">2</td><td>X Y Z outside the limits</td></tr>
+<tr><td class="num">3</td><td>RotZ RotY outside the limits</td></tr>
+<tr><td class="num">4</td><td>circle block with radius 0</td></tr>
+<tr><td class="num">5</td><td>robot not ready, not referenced, or no access</td></tr>
+<tr><td class="num">6</td><td>robot moving or program running at start</td></tr>
+<tr><td class="num">7</td><td>communication lost</td></tr>
+<tr><td class="num">8</td><td>override 0</td></tr>
+<tr><td class="num">10</td><td>wrong block echo in REAL[71]</td></tr>
+<tr><td class="num">11</td><td>program did not start running</td></tr>
+<tr><td class="num">12</td><td>move timeout</td></tr>
+<tr><td class="num">13</td><td>run number echo missing in REAL[72]</td></tr>
+<tr><td class="num">14</td><td>program 20 not initialized or finished at start</td></tr>
+<tr><td class="num">15</td><td>program stop not taken, "repositioning required" stays (engine v0.5)</td></tr>
+<tr><td class="num">16</td><td>path longer than 7 poses in the request (engine v0.6, path mode)</td></tr>
+<tr><td class="num">20</td><td>Enable fell during the move</td></tr>
+<tr><td class="num">21</td><td>robot fault, see message id</td></tr>
+<tr><td class="num">22</td><td>RobotMonitor took the access</td></tr>
+</table></div></div>
+<div><h3>Job, <code>"DB_RobotJob".State.intErrId</code></h3>
+<div class="tw"><table>
+<tr><td class="num">1</td><td>a needed pose is not taught (cube 2 … 7, drum 2 and 8)</td></tr>
+<tr><td class="num">2</td><td>safe Z not set</td></tr>
+<tr><td class="num">3</td><td>engine busy or in error at start</td></tr>
+<tr><td class="num">4</td><td>a pose of the job is outside the limits, active shows which move</td></tr>
+<tr><td class="num">5</td><td>drum radius not set</td></tr>
+<tr><td class="num">10</td><td>engine error during the job, see engine error</td></tr>
+</table></div>
+<p>Every error is also one bit in <code>"DB_RobotJob".aoxAlarm</code> for the alarm view: engine 1–22, job 5 on bit 9, job 1 2 3 4 10 on bits 23–27, robot on 28–32.</p>
+</div>
+</div>
+</div>

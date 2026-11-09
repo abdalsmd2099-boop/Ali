@@ -8,8 +8,8 @@ Every change gets a dated row in `GOALS.md`.
 |---|---|---|
 | `GOALS.md` (root) | the goals, the design, the contract with program 20, the error numbers, the dated change log. The reference for everything | section 5 and the change log |
 | `PLC/` | the blocks as they go into TIA: `UDT_*.udt`, `DB_*.scl`, `FC_*.scl`, `FB_*.scl`, `OB1_Stage2_call.scl` (all nine OB1 networks, pin by pin), `OB30_complete.scl` and `OB30_NW2_pins.md` (the robot call). `BLOCK_MAP.md` says which block writes which tag | `BLOCK_MAP.md` |
-| `HMI/` | the screens: `SCREENS.html` (every object with its tag, A1 … A50), `HMI_STAGE1.md` (Robot move box), `HMI_STAGE2.md` (JOB box, text lists), `HMI_CUBE_HOWTO.md` (CUBE box), `SCREEN_FIXES.md` (what is wrong on the real screen and how to fix it) | `SCREEN_FIXES.md` |
-| `TEST/` | testing and following the errors: `CHECKLIST_CUBE_AUTO.md` (what must exist, the pins, the build order A–D with D0 = no turn), `TEST_PROTOCOL.md` (the tests with the expected values), `TEST_SHEET.md`, `NEXT_STEPS.md`, `ERROR_LOG.md` (every error seen at the machine, with date, cause and fix) | `ERROR_LOG.md`, then the checklist |
+| `HMI/` | the screens: `SCREENS.html` (every object with its tag, A1 … A77, M43), `HMI_STAGE1.md` (Robot move box), `HMI_STAGE2.md` (JOB box, DRUM box, LINE box with AREA, text lists), `HMI_CUBE_HOWTO.md` (CUBE box), `SCREEN_FIXES.md` (what is wrong on the real screen and how to fix it) | `SCREEN_FIXES.md` |
+| `TEST/` | testing and following the errors: `CHECKLIST_CUBE_AUTO.md` (what must exist, the pins, the build order A–D with D0 = no turn), `CHECKLIST_DRUM_AUTO.md` (the drum: TIA, robot, screen, numbers, test; part 0 = commissioning in order), `CHECKLIST_LINE_AUTO.md` (the line scan, job 3: serpentine, raster, patch, the area by two corners, the whole table, 2026-11-09), `TEST_PROTOCOL.md` (the tests with the expected values), `TEST_SHEET.md`, `NEXT_STEPS.md`, `ERROR_LOG.md` (every error seen at the machine, with date, cause and fix) | `ERROR_LOG.md`, then the checklist |
 | `ROBOT/` | the SEW side: `PROGRAM20.md` (the program on the robot, block by block), the MOVIKIT manual as text and pdf, the MovirunSmart monitor doc, the bus map picture | `PROGRAM20.md` |
 | `DOCS/` | plans and maps: `AUTOMATIC_TODAY.md` (the day plan in parts 1–7), `ROADMAP.md`, the stage and step readmes, `REVIEW_2026-10-29.md`, `SYSTEM_MAP.html` and `SOLUTION_MAP.html` (the pictures of the whole) | `AUTOMATIC_TODAY.md` |
 | `REF/` | material you brought: the StepChain docx files, the OB30 exports, photos and screenshots. Read only | – |
@@ -29,4 +29,3 @@ Every change gets a dated row in `GOALS.md`.
 | Screens | `HMI/SCREENS.html` | https://claude.ai/artifact/K8eztVxRTwZqFbCw4vBh7p |
 | System map | `DOCS/SYSTEM_MAP.html` | https://claude.ai/artifact/AagbAehqpKH8WkBnqbmK3x |
 | Gantry full map | `DOCS/SOLUTION_MAP.html` | https://claude.ai/artifact/AQSZvUfrtDkGQrE52S4Lnv |
-| Screens V2 (RUN, SETUP, HAND, DIAG) | `HMI/SCREENS_V2.html` | https://claude.ai/artifact/XAX9Qbdy4iHmrQSPeb2Jqu |

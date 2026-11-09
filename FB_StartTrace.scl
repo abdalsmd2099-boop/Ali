@@ -1,0 +1,165 @@
+FUNCTION_BLOCK "FB_StartTrace"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// 2026-11-03. diagnostic only, delete it when the start works. it writes nothing but its own
+// instance db. it records, during one move of fb_robotmove, what the bus carried at every
+// step: the control words to the robot (po 1..4), the status words from the robot (pi 1..5),
+// and the plc tags around the start. one row per step change, ten rows during step 40, the
+// error row at the end. the next MOVE clears the rows and records again.
+//
+// call: ob30 (your ob33), a new network 5 after the status map, so the words are read right
+// after the module fbs wrote them, every 10 ms:
+//    "IDB_StartTrace"(i_intStep      := "DB_RobotMove".State.intStep,
+//                     i_intErrId     := "DB_RobotMove".State.intErrId,
+//                     i_aowPO        := "DB_MOVIKIT_Robotics-5AX".PO,      // the output words of module 1
+//                     i_aowPI        := "DB_MOVIKIT_Robotics-5AX".PI,
+//                     i_xCmdStart    := "DB_App".Cmd.Start,
+//                     i_xReadyToStart := "DB_App".ReadyToStart,
+//                     i_xMachineOn   := "DB_App".MachineOn,
+//                     i_xGate1       := "DB_App".Srl.Gate[1]);
+// if the output array of the module 1 instance has another name than PO, put that name on the pin.
+//
+// read: open "IDB_StartTrace" online, monitor all, expand aoSnap. intCount says how many rows
+// are filled. photograph rows 1 .. intCount. the columns are named so that no bit counting is needed.
+   VAR_INPUT
+      i_intStep : Int;                   // "DB_RobotMove".State.intStep
+      i_intErrId : Int;                  // "DB_RobotMove".State.intErrId
+      i_aowPO : Array[1..64] of Word;    // "DB_MOVIKIT_Robotics-5AX".PO
+      i_aowPI : Array[1..64] of Word;    // "DB_MOVIKIT_Robotics-5AX".PI
+      i_xCmdStart : Bool;                // "DB_App".Cmd.Start
+      i_xReadyToStart : Bool;            // "DB_App".ReadyToStart
+      i_xMachineOn : Bool;               // "DB_App".MachineOn
+      i_xGate1 : Bool;                   // "DB_App".Srl.Gate[1]
+   END_VAR
+
+   VAR
+      intCount : Int;                    // rows filled, 0..30
+      intStepOld : Int;
+      intCyclesInStep : Int;
+      aoSnap : Array[1..30] of STRUCT
+         intStep : Int;                  // engine step when the row was taken
+         intCycle : Int;                 // 10 ms cycles since that step began, 0 = first cycle
+         // ---- to the robot, po 1..4 ----
+         xPO_Enable : Bool;              // po 1.0
+         xPO_Handshake : Bool;           // po 1.15, must differ between rows
+         xPO_Automatic : Bool;           // po 2.0
+         xPO_Start : Bool;               // po 2.2  <- the start edge
+         xPO_Pause : Bool;               // po 2.3
+         xPO_Stop : Bool;                // po 2.4
+         wPO_Jog : Word;                 // po 3, must be 0
+         intPO_Prg : Int;                // po 4 bits 0..7, must be 20
+         intPO_Override : Int;           // po 4 bits 8..15, must not be 0
+         // ---- from the robot, pi 1..5 ----
+         xPI_Ready : Bool;               // pi 1.0
+         xPI_Setpoint : Bool;            // pi 1.6
+         xPI_Fault : Bool;               // pi 1.8
+         xPI_Warning : Bool;             // pi 1.9
+         xPI_Access : Bool;              // pi 1.13
+         xPI_Handshake : Bool;           // pi 1.15
+         xPI_Automatic : Bool;           // pi 2.0
+         xPI_Initialized : Bool;         // pi 2.2
+         xPI_Running : Bool;             // pi 2.3  <- must come after the start
+         xPI_Finished : Bool;            // pi 2.5
+         xPI_RepReq : Bool;              // pi 2.6
+         xPI_RepActive : Bool;           // pi 2.7
+         uiPI_Msg : UInt;                // pi 3, message id, 32057 = 125.57, 32058 = 125.58
+         intPI_Prg : Int;                // pi 4 bits 0..7
+         xPI_JogMode : Bool;             // pi 4.8
+         xPI_RefMode : Bool;             // pi 4.9
+         xPI_PrgMode : Bool;             // pi 4.10
+         xPI_OutsideWs : Bool;           // pi 5.1
+         // ---- plc side ----
+         xCmdStart : Bool;               // "DB_App".Cmd.Start
+         xReadyToStart : Bool;           // "DB_App".ReadyToStart
+         xMachineOn : Bool;              // "DB_App".MachineOn
+         xGate1 : Bool;                  // "DB_App".Srl.Gate[1]
+         intErrId : Int;                 // engine error, filled in the error row
+      END_STRUCT;
+   END_VAR
+
+   VAR_TEMP
+      tmp_xTake : Bool;
+      tmp_k : Int;
+   END_VAR
+
+   VAR CONSTANT
+      ROWS : Int := 30;
+      CYCLES_IN_40 : Int := 10;          // rows taken every cycle at the beginning of step 40
+      CYCLES_IN_20 : Int := 3;
+   END_VAR
+
+BEGIN
+   // ---- a new move clears the rows ----------------------------------------------------
+   IF #i_intStep = 5 AND #intStepOld = 0 THEN
+      #intCount := 0;
+   END_IF;
+
+   // ---- cycles in the current step ------------------------------------------------------
+   IF #i_intStep <> #intStepOld THEN
+      #intCyclesInStep := 0;
+   ELSIF #intCyclesInStep < 30000 THEN
+      #intCyclesInStep := #intCyclesInStep + 1;
+   END_IF;
+
+   // ---- when to take a row -------------------------------------------------------------------
+   #tmp_xTake := FALSE;
+   IF #i_intStep <> #intStepOld AND #i_intStep <> 0 THEN
+      #tmp_xTake := TRUE;                                    // every step change
+   ELSIF #i_intStep = 40 AND #intCyclesInStep < #CYCLES_IN_40 THEN
+      #tmp_xTake := TRUE;                                    // the first ten cycles after the start edge
+   ELSIF #i_intStep = 20 AND #intCyclesInStep < #CYCLES_IN_20 THEN
+      #tmp_xTake := TRUE;                                    // the first cycles with pose and gate on the bus
+   END_IF;
+
+   IF #tmp_xTake AND #intCount < #ROWS THEN
+      #intCount := #intCount + 1;
+      #tmp_k := #intCount;
+      #aoSnap[#tmp_k].intStep := #i_intStep;
+      #aoSnap[#tmp_k].intCycle := #intCyclesInStep;
+
+      #aoSnap[#tmp_k].xPO_Enable := #i_aowPO[1].%X0;
+      #aoSnap[#tmp_k].xPO_Handshake := #i_aowPO[1].%X15;
+      #aoSnap[#tmp_k].xPO_Automatic := #i_aowPO[2].%X0;
+      #aoSnap[#tmp_k].xPO_Start := #i_aowPO[2].%X2;
+      #aoSnap[#tmp_k].xPO_Pause := #i_aowPO[2].%X3;
+      #aoSnap[#tmp_k].xPO_Stop := #i_aowPO[2].%X4;
+      #aoSnap[#tmp_k].wPO_Jog := #i_aowPO[3];
+      #aoSnap[#tmp_k].intPO_Prg := WORD_TO_INT(#i_aowPO[4] AND W#16#00FF);
+      #aoSnap[#tmp_k].intPO_Override := WORD_TO_INT(SHR(IN := #i_aowPO[4], N := 8));
+
+      #aoSnap[#tmp_k].xPI_Ready := #i_aowPI[1].%X0;
+      #aoSnap[#tmp_k].xPI_Setpoint := #i_aowPI[1].%X6;
+      #aoSnap[#tmp_k].xPI_Fault := #i_aowPI[1].%X8;
+      #aoSnap[#tmp_k].xPI_Warning := #i_aowPI[1].%X9;
+      #aoSnap[#tmp_k].xPI_Access := #i_aowPI[1].%X13;
+      #aoSnap[#tmp_k].xPI_Handshake := #i_aowPI[1].%X15;
+      #aoSnap[#tmp_k].xPI_Automatic := #i_aowPI[2].%X0;
+      #aoSnap[#tmp_k].xPI_Initialized := #i_aowPI[2].%X2;
+      #aoSnap[#tmp_k].xPI_Running := #i_aowPI[2].%X3;
+      #aoSnap[#tmp_k].xPI_Finished := #i_aowPI[2].%X5;
+      #aoSnap[#tmp_k].xPI_RepReq := #i_aowPI[2].%X6;
+      #aoSnap[#tmp_k].xPI_RepActive := #i_aowPI[2].%X7;
+      #aoSnap[#tmp_k].uiPI_Msg := WORD_TO_UINT(#i_aowPI[3]);
+      #aoSnap[#tmp_k].intPI_Prg := WORD_TO_INT(#i_aowPI[4] AND W#16#00FF);
+      #aoSnap[#tmp_k].xPI_JogMode := #i_aowPI[4].%X8;
+      #aoSnap[#tmp_k].xPI_RefMode := #i_aowPI[4].%X9;
+      #aoSnap[#tmp_k].xPI_PrgMode := #i_aowPI[4].%X10;
+      #aoSnap[#tmp_k].xPI_OutsideWs := #i_aowPI[5].%X1;
+
+      #aoSnap[#tmp_k].xCmdStart := #i_xCmdStart;
+      #aoSnap[#tmp_k].xReadyToStart := #i_xReadyToStart;
+      #aoSnap[#tmp_k].xMachineOn := #i_xMachineOn;
+      #aoSnap[#tmp_k].xGate1 := #i_xGate1;
+      #aoSnap[#tmp_k].intErrId := #i_intErrId;
+   END_IF;
+
+   #intStepOld := #i_intStep;
+
+   // what to look for in the rows:
+   //   step 20: xGate1 and xPO_Automatic 1, xPO_Start 0, xPI_Initialized or xPI_Finished 1
+   //   step 40 cycle 0..9: xPO_Start must become 1 and stay. xPO_Handshake must change between rows.
+   //            xPI_Running must appear within a few rows. if xPI_Running never comes and
+   //            uiPI_Msg turns 32057: the robot refused the edge. if xPO_Start never becomes 1:
+   //            the start does not leave the plc. wPO_Jog not 0: a jog bit is set.
+   //   step 90: intErrId, uiPI_Msg
+END_FUNCTION_BLOCK

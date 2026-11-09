@@ -1,0 +1,13 @@
+DATA_BLOCK "DB_Robot"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+// robot status as named bits. one writer: fc_robotstatusmap in ob30 network 4.
+// everybody else only reads it (fb_robotmove, hmi, step chain).
+NON_RETAIN
+   VAR
+      Status : "UDT_RobotStatus";
+   END_VAR
+
+BEGIN
+
+END_DATA_BLOCK
