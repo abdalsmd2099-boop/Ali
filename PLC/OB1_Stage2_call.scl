@@ -14,6 +14,9 @@
 // 2026-11-09, later: the whole table. the line job v0.2 gets one input at the end (i_xArea) and one
 // output at the end (o_intLineCount); the engine v0.8 gets one input at the end (i_rMinSpeed). after the
 // imports the two boxes show the new pins in red: right-click, update block call, then wire them.
+// 2026-11-11: the review port (docs/engine_review_2026-11-04.md). engine v0.9: no pin change.
+// fc_moveselect v0.3: i_xJobRunning at the end. cube job v0.7: i_intBlocksInPrg20 at the end.
+// i_xActualValid of the three jobs also wants the robot standing. cube buttons v0.2: no pin change.
 
 // ---------------------------------------------------------------------------
 // network: machine ready  (yours. FB_MachineReady v0.2 in the folder since 2026-11-05)
@@ -137,9 +140,11 @@
                   i_rAngle        := "DB_Recipe".Cube.rAngle,
                   i_xFromHere     := "DB_Recipe".xFromHere,               // v0.3: scan from here
                   i_udtActual     := "DB_Robot".Status.udtPoseBcs,
-                  i_xActualValid  := "DB_Robot".Status.xReferenced AND "DB_Robot".Status.xCommOK,
+                  i_xActualValid  := "DB_Robot".Status.xReferenced AND "DB_Robot".Status.xCommOK
+                                     AND NOT "DB_Robot".Status.xMoving AND NOT "DB_Robot".Status.xPrgRunning,   // 2026-11-11: standing, else "scan from here" takes a pose on the way
                   i_xPathMode     := "DB_Recipe".xPathMode,                 // v0.5: path mode, off = as before
                   i_xNoTurn       := "DB_Recipe".xNoTurn,                   // v0.6 (2026-11-04): no turn at the corners, off = as before
+                  i_intBlocksInPrg20 := "DB_RobotMove".Cfg.intBlocksInPrg20,   // v0.7 (2026-11-11): path mode only with block 5 in program 20, else job error 7
                   o_xPushReq      => "DB_RobotJob".Cube.xPushReq,
                   o_udtPush       => "DB_RobotJob".Cube.udtPush,
                   o_xClear        => "DB_RobotJob".Cube.xClear,
@@ -164,7 +169,8 @@
                   i_intQueueCount := "DB_MoveQueue".intCount,
                   i_xFromHere     := "DB_Recipe".xFromHere,               // v0.2: scan from here
                   i_udtActual     := "DB_Robot".Status.udtPoseBcs,
-                  i_xActualValid  := "DB_Robot".Status.xReferenced AND "DB_Robot".Status.xCommOK,
+                  i_xActualValid  := "DB_Robot".Status.xReferenced AND "DB_Robot".Status.xCommOK
+                                     AND NOT "DB_Robot".Status.xMoving AND NOT "DB_Robot".Status.xPrgRunning,   // 2026-11-11: standing
                   i_xPathMode     := "DB_Recipe".xPathMode,                 // v0.4: path mode, off = as before
                   i_xNoTurn       := "DB_Recipe".xNoTurn,                   // v0.5 (2026-11-06): no turn on the circle, the same switch as the cube. off = as before
                   o_udtOut        => "DB_RobotJob".Drum);
@@ -197,7 +203,8 @@
                   i_intQueueCount := "DB_MoveQueue".intCount,
                   i_xFromHere     := "DB_Recipe".xFromHere,               // the actual pose is the start of line 0
                   i_udtActual     := "DB_Robot".Status.udtPoseBcs,         // also the window bit reads it
-                  i_xActualValid  := "DB_Robot".Status.xReferenced AND "DB_Robot".Status.xCommOK,
+                  i_xActualValid  := "DB_Robot".Status.xReferenced AND "DB_Robot".Status.xCommOK
+                                     AND NOT "DB_Robot".Status.xMoving AND NOT "DB_Robot".Status.xPrgRunning,   // 2026-11-11: standing. the window bit still reads i_udtActual every cycle
                   i_xNoTurn       := "DB_Recipe".xNoTurn,                   // the same switch as on the cube and the drum box
                   i_xArea         := "DB_Recipe".Line.xArea,                // v0.2 (2026-11-09): the area by pose 9 and pose 10. off = as before
                   o_udtOut        => "DB_RobotJob".Line,
@@ -234,9 +241,9 @@
                 o_xPushRefused => "DB_MoveQueue".xPushRefused);
 
 // ---------------------------------------------------------------------------
-// network: robot move  (stage 1 network, fc_moveselect now v0.2 with four new pins,
+// network: robot move  (stage 1 network, fc_moveselect v0.3 with the job-running pin, 2026-11-11;
 // fb_robotmove v0.6 with two new in-out pins on "DB_RobotPath" at the end, 2026-11-04;
-// fb_robotmove v0.8 with one new input at the end, i_rMinSpeed, 2026-11-09)
+// fb_robotmove v0.8 with one new input at the end, i_rMinSpeed, 2026-11-09; v0.9 no pin change)
 // ---------------------------------------------------------------------------
 "FC_MoveSelect"(i_xHand           := "DB_RobotMove".Man.xEnable AND NOT "DB_RobotJob".Man.xAuto,
                 i_xAuto           := "DB_RobotMove".Man.xEnable AND "DB_RobotJob".Man.xAuto,
@@ -245,6 +252,7 @@
                 i_udtQueueHead    := "DB_MoveQueue".Head,
                 i_xQueueHeadValid := "DB_MoveQueue".xHeadValid,
                 i_udtMoveState    := "DB_RobotMove".State,
+                i_xJobRunning     := "DB_RobotJob".State.xRunning,          // v0.3 (2026-11-11): no start from the queue without a running job
                 o_udtReq          => "DB_RobotMove".Req,
                 o_xStart          => "DB_RobotMove".xReqStart);
 

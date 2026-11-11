@@ -49,11 +49,11 @@ Reading order on the machine: section 1 (what is in the project tree), 2 (OB1 pi
 | FB | Instance | Version | ☐ |
 |---|---|---|---|
 | `FB_RobotMode` | `IDB_RobotMode` | v0.1. The one writer of `"DB_App".Cmd.Automatic` | ☐ |
-| `FB_CubeButtons` | `IDB_CubeButtons` | v0.1. The one writer of `"DB_RobotJob".Teach.intPoseNr`, `.xTeach`, `.xClear` and of `"DB_RobotHand".Lamp` | ☐ |
+| `FB_CubeButtons` | `IDB_CubeButtons` | v0.2 (2026-11-11): a go to writes id, path length 0, blending 0, parameters 0 besides pose and block. Same pins as v0.1. The one writer of `"DB_RobotJob".Teach.intPoseNr`, `.xTeach`, `.xClear` and of `"DB_RobotHand".Lamp` | ☐ |
 | `FB_Teach` | `IDB_Teach` | unchanged | ☐ |
-| `FB_ScanCubeJob` | `IDB_ScanCubeJob` | v0.4 (six new pins) works. v0.5 adds `i_xPathMode`, wire it to `"DB_Recipe".xPathMode` and leave the switch off. v0.6 (2026-11-04) adds `i_xNoTurn` on `"DB_Recipe".xNoTurn`: on = no turns, corner 1 at any RotZ | ☐ |
+| `FB_ScanCubeJob` | `IDB_ScanCubeJob` | v0.7 (2026-11-11): new pin `i_intBlocksInPrg20` at the end, first cause kept, safe Z above corner 1, job errors 7 and 8. v0.5 added `i_xPathMode` (`"DB_Recipe".xPathMode`, switch off), v0.6 `i_xNoTurn` (`"DB_Recipe".xNoTurn`: on = no turns, corner 1 at any RotZ) | ☐ |
 | `FB_MoveQueue` | `IDB_MoveQueue` | unchanged, FIFO of 50 | ☐ |
-| `FB_RobotMove` | `IDB_RobotMove` | v0.4 in the PLC works (gate with the pose). v0.6 (folder) = v0.4 + program stop after a jog (v0.5) + path pins (v0.6): needs `UDT_MoveState` v0.2, `UDT_MoveReq` v0.3, `DB_RobotPath`, two OB1 pins, the OB30 stop pin. Recommended, not required for the cube | ☐ |
+| `FB_RobotMove` | `IDB_RobotMove` | v0.9 (2026-11-11): same pins as v0.8 (`i_rMinSpeed` at the end). Step 0 writes program number and start, settle from "ready", run number never equal to the echo, request copied, errors 17 and 18, step 95. Needs `UDT_MoveState` v0.2, `UDT_MoveReq` v0.3, `DB_RobotPath`, `DB_RobotMove` v0.3 (`Cfg.rMinSpeed`), the OB30 stop pin with the OR | ☐ |
 | `FB_StartTrace` | `IDB_StartTrace` | diagnostic only, optional. Delete when the start is stable | – |
 | MOVIKIT module 1 and 2 FBs | the two MOVIKIT DBs | yours | ☐ |
 
@@ -114,9 +114,10 @@ The full text of every call: `OB1_Stage2_call.scl`. In LAD one box per network.
 | `i_rLength`, `i_rWidth`, `i_rAngle` | `"DB_Recipe".Cube.rLength`, `.rWidth`, `.rAngle` |
 | `i_xFromHere` | `"DB_Recipe".xFromHere` |
 | `i_udtActual` | `"DB_Robot".Status.udtPoseBcs` |
-| `i_xActualValid` | `"DB_Robot".Status.xReferenced` AND `.xCommOK` |
+| `i_xActualValid` | `"DB_Robot".Status.xReferenced` AND `.xCommOK` AND NOT `.xMoving` AND NOT `.xPrgRunning` (the two NOT since 2026-11-11: "scan from here" only from a standing robot; the same on the drum and line job) |
 | `i_xPathMode` | only v0.5: `"DB_Recipe".xPathMode` |
 | `i_xNoTurn` | only v0.6 (2026-11-04): `"DB_Recipe".xNoTurn`. On = no turn at the corners, the turn moves are left out |
+| `i_intBlocksInPrg20` | only v0.7 (2026-11-11): `"DB_RobotMove".Cfg.intBlocksInPrg20`. Path mode with a value below 5 → job error 7 before any move |
 | `o_xPushReq`, `o_udtPush`, `o_xClear`, `o_udtState` | without part 6: `"DB_RobotJob".Push.xReq`, `.Push.udtMove`, `.Push.xClear`, `"DB_RobotJob".State`. With part 6: `"DB_RobotJob".Cube.xPushReq`, `.udtPush`, `.xClear`, `.udtState` and the `FC_JobMux` network after it |
 
 **2.5 Move queue** `IDB_MoveQueue` ☐
@@ -137,6 +138,7 @@ The full text of every call: `OB1_Stage2_call.scl`. In LAD one box per network.
 | `i_udtMan`, `i_xManStart` | `"DB_RobotMove".Man.udtReq`, `.Man.xStart` |
 | `i_udtQueueHead`, `i_xQueueHeadValid` | `"DB_MoveQueue".Head`, `.xHeadValid` |
 | `i_udtMoveState` | `"DB_RobotMove".State` |
+| `i_xJobRunning` | only v0.3 (2026-11-11): `"DB_RobotJob".State.xRunning` |
 | `o_udtReq`, `o_xStart` | `"DB_RobotMove".Req`, `.xReqStart` |
 
 **2.7 Engine** `IDB_RobotMove`, same network, after the select ☐
@@ -171,7 +173,7 @@ The full text of every call: `OB1_Stage2_call.scl`. In LAD one box per network.
 | NW2 | `override`, `prog_no` | `"DB_App".Cmd.Override`, `.Cmd.ProgramNumber` (engine) | ☐ |
 | NW2 | `start` | `"DB_App".Cmd.Start AND "DB_App".ReadyToStart AND "DB_App".MachineOn`. The two conditions must be TRUE when MOVE or START is pressed, else engine error 11 | ☐ |
 | NW2 | `pause` | `"DB_App".Cmd.Pause`, FALSE all day | ☐ |
-| NW2 | `stop` | `"DB_App".Cmd.Stop` with engine v0.4; `("DB_App".Cmd.Stop OR "DB_RobotMove".State.xPrgStop)` with v0.5 and v0.6 | ☐ |
+| NW2 | `stop` | `("DB_App".Cmd.Stop OR "DB_RobotMove".State.xPrgStop)` with engine v0.5 and later. With `Cmd.Stop` alone the engine's stop never reaches the robot: error 15 after every jog, and step 95 (v0.9) cannot stop the robot after an error. Cross-reference of `State.xPrgStop` must show this network | ☐ |
 | NW2 | `homing_Start_*`, `jog_*` | as today, old screen or your homing helper | ☐ |
 | NW2 | segments `Pose_*_n`, `blending_distance_n` | as today on `"DB_App".Path.Seg[n]`. `DB_RobotPath` only with part 7 | ☐ |
 | NW3 module 2 | `enable` | `"DB_App".Cmd.Enable` | ☐ |
@@ -294,10 +296,10 @@ The full text of every call: `OB1_Stage2_call.scl`. In LAD one box per network.
 
 | List | Entries | ☐ |
 |---|---|---|
-| `TL_Step` | 0 idle, 5 check, 10 write pose, 15 program stop, 20 settle, 30 start, 40 wait running, 50 moving, 60 end, 90 error | ☐ |
-| `TL_Err` | 0 … 22 as `HMI_STAGE1.md` section 3, with 15 "program stop not taken, repositioning stays" | ☐ |
+| `TL_Step` | 0 idle, 5 check, 10 write pose, 15 program stop, 20 settle, 30 start, 40 wait running, 50 wait finished, 60 end, 90 error, 95 stopping the robot (engine v0.9). The full texts: `HMI/SCREEN_FIXES.md` 2.1 | ☐ |
+| `TL_Err` | 0 … 22 as `GOALS.md` 5.5: with 15 program stop not taken, 16 path longer than 7, 17 block 5 without a path (v0.9), 18 program stopped or paused from outside (v0.9). The full texts: `HMI/SCREEN_FIXES.md` 2.1 | ☐ |
 | `TL_Block` | 1 linear, 2 linear slow, 3 circle ccw, 4 circle cw | ☐ |
-| `TL_JobErr` | 1 pose not taught, 2 safe Z, 3 engine busy, 4 outside limits, 5 drum radius, 6 scan from here not possible, 10 engine error | ☐ |
+| `TL_JobErr` | 1 pose not taught, 2 safe Z not set or below corner 1, 3 engine busy, 4 outside limits, 5 a recipe number not set, 6 scan from here not possible, 7 path mode without block 5 (cube job v0.7), 8 turns with corner 1 not at −180 (v0.7), 9 scan height not above the face (line job), 10 engine error. The full texts: `HMI/SCREEN_FIXES.md` 2.1 | ☐ |
 | `TL_JobStep`, `TL_Move` | as `HMI_STAGE2.md` section 3. `TL_Move` 1 to 14: start, approach, corner 1, side 1, turn c2, side 2, turn c3, side 3, turn c4, side 4, turn c1, lift, start, home | ☐ |
 
 ---
