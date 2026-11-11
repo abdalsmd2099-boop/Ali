@@ -40,7 +40,7 @@ Reading order on the machine: section 1 (what is in the project tree), 2 (OB1 pi
 |---|---|---|
 | `FC_PoseCheck` | limits X 0..4380, Y 0..4230, Z −10..1908, RotZ ±180, RotY ±10 | ☐ |
 | `FC_RobotStatusMap` | PI words → `DB_Robot.Status`, with PI 2.6 and 2.7 | ☐ |
-| `FC_MoveSelect` | v0.2, seven inputs: `i_xHand`, `i_xAuto`, `i_udtMan`, `i_xManStart`, `i_udtQueueHead`, `i_xQueueHeadValid`, `i_udtMoveState` | ☐ |
+| `FC_MoveSelect` | v0.3 (2026-11-11), eight inputs: `i_xHand`, `i_xAuto`, `i_udtMan`, `i_xManStart`, `i_udtQueueHead`, `i_xQueueHeadValid`, `i_udtMoveState`, `i_xJobRunning`. v0.2 had seven; v0.3 starts from the queue only while the job runs | ☐ |
 | `FC_RobotAlarms` | engine errors on bits 1–22, job errors on 23–27, robot on 28–32 | ☐ |
 | `FC_JobMux` | only with part 6. Not needed for the cube | – |
 

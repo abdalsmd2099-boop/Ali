@@ -306,9 +306,9 @@ Few pins, two UDTs. A new field in a UDT does not change the call in OB1.
 
 | Step | Name | What happens | Goes on when |
 |---|---|---|---|
-| 0 | idle | gates FALSE, start FALSE, busy FALSE | start edge and enable |
-| 5 | check | block 1..`Cfg.intBlocksInPrg20`, `FC_PoseCheck` = 0, comm OK, ready, referenced, automatic, access granted, no fault, not moving, program not running. v0.6: every path pose checked too, error 16 if more than 7 | all true, else error and back to 0 |
-| 10 | write | program number 20, pose into `Srl.Pose[1..5]`, `aorPar[1..3]` into `Par[1..3]`, run number + 1 into `Par[4]`, override if given, the path into `DB_RobotPath` when `intPathLen` > 0 (v0.6), all gates FALSE then the gate of the chosen block TRUE (v0.4), gate enable TRUE, start FALSE | "repositioning required" (PI 2.6) → 15, else → 20 |
+| 0 | idle | busy FALSE. v0.9: program number 20 and start FALSE written every cycle, the bus is defined in idle | start edge and enable |
+| 5 | check | block 1..`Cfg.intBlocksInPrg20`, `FC_PoseCheck` = 0, comm OK, ready, referenced, automatic, access granted, no fault, setpoints active, STO inactive and output stage on (v0.9), not moving, program not running or paused, override > 0. v0.6: every path pose checked too, error 16 if more than 7. v0.9: block 5 without a path → error 17; the request is copied into the block, step 10 writes the copy. v0.8: the time limit of the move is computed here | all true, else error and back to 0 |
+| 10 | write | program number 20, pose into `Srl.Pose[1..5]`, `aorPar[1..3]` into `Par[1..3]`, run number + 1 into `Par[4]` (v0.9: never the number the robot still echoes in REAL[72]), override if given, the path into `DB_RobotPath` when `intPathLen` > 0 (v0.6), all gates FALSE then the gate of the chosen block TRUE (v0.4), gate enable TRUE, start FALSE | "repositioning required" (PI 2.6) → 15, else → 20 |
 | 15 | program stop (v0.5) | `State.xPrgStop` TRUE, OB30 NW2 puts it on the stop pin. The robot cancels the way back to the old path and shows the program initialized (manual 9.8, 9.10) | initialized AND NOT repositioning required → stop FALSE, → 20. `T_STOP` = 2 s → error 15 |
 | 20 | settle | wait `T_SETTLE` = 100 ms (v0.4) with the pose and gate on the bus, counted from the moment the robot shows program 20 ready: initialized or finished, and the control type inactive (v0.9, manual 6.3) | → 30. `T_PRG` = 3 s without program 20 ready → error 14 |
 | 30 | go | start TRUE (the gate is open since step 10) | at once |
